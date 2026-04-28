@@ -1,7 +1,18 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.routers import learn, search, health
+from app.services.pipeline import vector_store, metadata_store
 
-app = FastAPI(title="工业仓库物流识别系统", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    vector_store.load()
+    yield
+    vector_store.save()
+    metadata_store.close()
+
+
+app = FastAPI(title="工业仓库物流识别系统", version="1.0.0", lifespan=lifespan)
 
 app.include_router(health.router)
 app.include_router(learn.router, prefix="/api/learn", tags=["学习端"])
