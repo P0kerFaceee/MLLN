@@ -18,26 +18,30 @@ class VectorStore:
         self._index = None
 
     def _ensure_index(self):
-        """确保索引已创建并训练。数据量不足nlist时使用Flat索引，数据量>=nlist时切换到IVF。"""
-        total = len(self._vectors)
+        """确保索引已创建。数据量不足nlist时使用Flat索引，数据量>=nlist时切换到IVF。"""
         if self._index is None:
+            total = len(self._vectors)
             if total < self.nlist:
                 flat = faiss.IndexFlatL2(self.dim)
                 self._index = faiss.IndexIDMap(flat)
-                logger.info(f"使用Flat+IDMap索引（数据量{total} < nlist={self.nlist}）")
+                if total > 0:
+                    all_vecs = np.stack(list(self._vectors.values())).astype(np.float32)
+                    all_ids = np.array(list(self._vectors.keys()), dtype=np.int64)
+                    self._index.add_with_ids(all_vecs, all_ids)
+                logger.info(f"使用Flat+IDMap索引（数据量{total}）")
             else:
                 quantizer = faiss.IndexFlatL2(self.dim)
                 ivf = faiss.IndexIVFFlat(quantizer, self.dim, self.nlist)
                 self._index = faiss.IndexIDMap(ivf)
-                all_vecs = np.stack(list(self._vectors.values()))
+                all_vecs = np.stack(list(self._vectors.values())).astype(np.float32)
                 ivf.train(all_vecs)
                 ivf.nprobe = self.nprobe
-                for id_, vec in self._vectors.items():
-                    self._index.add_with_ids(vec.reshape(1, -1), np.array([id_], dtype=np.int64))
-                logger.info(f"使用IVF+IDMap索引，训练完成（数据量{total} >= nlist={self.nlist}）")
+                all_ids = np.array(list(self._vectors.keys()), dtype=np.int64)
+                self._index.add_with_ids(all_vecs, all_ids)
+                logger.info(f"使用IVF+IDMap索引，训练完成（数据量{total}）")
 
     def add(self, vector: np.ndarray, id: int, category: str):
-        """动态添加向量到索引，同时更新类别映射表。每次添加后自动持久化。"""
+        """动态添加向量到索引，同时更新类别映射表。"""
         vector = vector.astype(np.float32).reshape(1, -1)
         self._vectors[id] = vector.squeeze()
         if category not in self._category_map:
@@ -51,12 +55,10 @@ class VectorStore:
 
     def search(self, query: np.ndarray, category: str | None = None, top_k: int = 10) -> tuple[list[int], list[float]]:
         """检索相似向量。category不为None时按类别预过滤，为None时全库检索（降级模式）。"""
-        if self._index is None or len(self._vectors) == 0:
+        if self._index is None or self._index.ntotal == 0:
             return [], []
 
-        self._ensure_index()
         query = query.astype(np.float32).reshape(1, -1)
-
         search_k = top_k * 5 if category else top_k
         distances, ids = self._index.search(query, search_k)
 
@@ -76,6 +78,8 @@ class VectorStore:
         return result_ids, result_sims
 
     def get_total_count(self) -> int:
+        if self._index is not None:
+            return self._index.ntotal
         return len(self._vectors)
 
     def get_categories(self) -> list[str]:
@@ -92,6 +96,7 @@ class VectorStore:
         if FAISS_INDEX_PATH.exists():
             self._index = faiss.read_index(str(FAISS_INDEX_PATH))
             ntotal = self._index.ntotal
+            # Populate _vectors with placeholder so get_total_count works
             if hasattr(self._index, 'id_map') and ntotal > 0:
                 ids = faiss.vector_to_array(self._index.id_map).astype(np.int64)
                 for id_ in ids:
