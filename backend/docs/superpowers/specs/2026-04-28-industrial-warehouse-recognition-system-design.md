@@ -1,9 +1,3 @@
----
-name: industrial-warehouse-recognition-system
-description: 公司级工业仓库物流识别系统设计 — 学习端底库构建 + 使用端实时检索
-type: project
----
-
 # 工业仓库物流识别系统设计
 
 ## 1. 需求概要
@@ -11,104 +5,100 @@ type: project
 | 项目 | 值 |
 |------|-----|
 | 零件类型 | 混合（标准件+非标件），需同时支持类别识别和规格匹配 |
-| 底库规模 | >10k 条记录 |
-| 部署环境 | 内网服务器集群（有API出口访问阿里百炼） |
-| 多模态大模型 | 阿里百炼平台API调用 |
+| 底库规模 | >10k 条记录（当前测试数据 24 条，6个类别） |
+| 部署环境 | 内网服务器集群（有API出口访问阿里百炼），Docker Compose 部署 |
+| 多模态大模型 | 阿里百炼平台 API（dashscope） |
 | 响应时间 | 实时 <5s |
 | 底库时效性 | 学习端上传后使用端需立刻可检索 |
-| 测试照片 | 6组 × 4张 = 24张，覆盖6个类别 |
 | DINOv2模型 | dinov2_vitl14，特征向量维度1024 |
+| 前端 | Vue 3 + Vite SPA，工业精度仪表盘风格 |
 
 ## 2. 整体架构与数据流
 
 ### 学习端（底库构建管道）
 
 ```
-原始图片 → 图像增强 → YOLO目标检测/裁剪 → DINOv2(dinov2_vitl14)特征提取 → FAISS写入
-                                                                    ↓
-                                                              关联元数据（类别、规格、描述等）
-                                                                    ↓
-                                                              FAISS向量+元数据底库
+原始图片 → 图像增强 → DINOv2(dinov2_vitl14)整图特征提取 → FAISS写入
+                                                        ↓
+                                                  关联元数据（类别、规格、描述等）
+                                                        ↓
+                                                  FAISS向量+元数据底库
 ```
+
+**关键变更**：已移除 YOLO 目标检测/裁剪步骤，改用整图特征提取。工业零件图片通常目标明确、背景单一，整图特征比裁剪子图更稳定可靠。
 
 ### 使用端（检索管道）
 
 ```
-输入图片 → YOLO目标裁剪 → 百炼API类别判断 → FAISS类别预过滤 → DINOv2特征提取 → FAISS相似度检索 → TopX结果 → 元数据存储取完整图文 → 返回
+输入图片 → 图像增强 → 百炼API类别判断(参考) → DINOv2整图特征提取 → FAISS全库检索 → TopX结果 → 元数据存储取回完整图文 → 返回
 ```
 
-关键设计：百炼API类别判断作为**前置条件**，先按类别标签缩小FAISS检索范围（>10k → 几百条），再做向量相似度精排。
+**关键变更**：百炼API类别判断仅作**参考展示**，不再用于 FAISS 类别预过滤。DINOv2 特征本身具备相似度匹配能力，全库检索在当前数据规模下性能充足。百炼API不可用时自动降级为全库检索。
 
 ### 预计延迟
 
-- YOLO裁剪：~0.3-0.5s
-- 百炼API（阿里百炼国内网络）：~1-2s
+- 图像增强：~0.05s
+- 百炼API（阿里百炼国内网络）：~1-2s（参考，不影响检索流程）
 - DINOv2特征提取：~0.3-0.5s
-- FAISS检索（预过滤后范围小）：~0.1s
-- **总计：~2-3s**，满足 <5s 目标
+- FAISS全库检索：~0.1s
+- **总计：~0.5-1s**，远超 <5s 目标
 
 ## 3. 核心模块职责与接口定义
 
 | 模块 | 职责 | 输入 | 输出 |
 |------|------|------|------|
-| 图像增强模块 | 去噪、对比度调整、光照校正等预处理 | 原始图片(BLOB) | 增强后图片(BLOB) |
-| YOLO推理模块 | 目标检测+区域裁剪 | 图片(BLOB) | 裁剪子图(BLOB) + 检测框坐标 |
-| 百炼API模块 | 调用阿里百炼多模态API，判断零件类别 | 裁剪子图(BLOB) | 类别标签(string) |
-| DINOv2特征模块 | 提取裁剪子图的向量特征(dinov2_vitl14) | 裁剪子图(BLOB) | 特征向量(float[], dim=1024) |
-| FAISS向量库模块 | 向量存储、类别预过滤、相似度检索、动态添加 | 向量+元数据 或 查询向量+类别 | TopX结果列表(ID列表) |
-| 元数据存储模块 | 存储并关联类别、规格、描述、图片等完整图文信息 | 元数据对象 | 匹配结果的完整图文信息 |
+| 图像增强模块 | 去噪、对比度调整、光照校正预处理 | 原始图片(BLOB) | 增强后图片(BLOB) |
+| 百炼API模块 | 调用阿里百炼多模态API，判断零件类别（参考用途） | 图片(BLOB) | 类别标签(string) 或 None(降级) |
+| DINOv2特征模块 | 提取整图向量特征(dinov2_vitl14) | 图片(BLOB) | 特征向量(float[], dim=1024) |
+| FAISS向量库模块 | 向量存储、全库相似度检索、动态添加 | 向量+ID 或 查询向量 | TopX结果列表(ID+距离) |
+| 元数据存储模块 | 存储并关联类别、规格、描述、图片等完整信息 | 元数据对象 | 匹配结果的完整图文信息 |
 
 模块间依赖关系：
 
 ```
-学习端: 图像增强 → YOLO → DINOv2 → FAISS写入
-                          ↕
-                     元数据存储 ← 元数据输入
+学习端: 图像增强 → DINOv2 → FAISS写入
+                     ↕
+                元数据存储 ← 元数据输入
 
-使用端: YOLO → 百炼API → FAISS预过滤 → DINOv2 → FAISS检索 → 元数据存储(取图文)
+使用端: 图像增强 → 百炼API(参考) → DINOv2 → FAISS全库检索 → 元数据存储(取图文)
 ```
 
-FAISS向量库模块和元数据存储模块解耦：FAISS只存向量+ID+类别标签，元数据存储（SQLite或PostgreSQL）存完整图文信息。检索时FAISS返回ID列表，再从元数据存储中取回完整信息。FAISS索引保持轻量，>10k规模下检索性能不受图文数据大小影响。
+FAISS向量库和元数据存储解耦：FAISS只存向量+ID+类别标签，元数据存储（SQLite）存完整图文信息。检索时FAISS返回ID列表，再从元数据存储中取回完整信息。
 
 ## 4. FAISS索引策略与实时更新机制
 
 ### 索引选择
 
-使用 **FAISS IndexIVFFlat + 类别标签分区**：
+使用 **IndexIDMap(IndexFlatL2)**（小数据量）或 **IndexIDMap(IndexIVFFlat)**（大数据量）：
 
-- `IndexIVFFlat`：先聚类再检索，大规模数据下比 FlatL2 快10倍以上
+- IndexIDMap 包装确保向量与ID的稳定映射，支持动态 add_with_ids
+- 数据量 < nlist(100) 时使用 FlatL2（精确检索）
+- 数据量 >= nlist 时切换到 IVFFlat（聚类加速检索）
 - 向量维度：1024（匹配 dinov2_vitl14 输出）
-- 聚类数（nlist）：`sqrt(N)`，10k数据约100个聚类
-- 每个向量附带 `id`，通过 `add_with_ids` 动态添加，无需重建索引
-- 检索时 `nprobe=10`（探测10个聚类），控制精度/速度平衡
 
-### 类别预过滤实现
+### 类别映射与重建
 
-维护内存中 **类别→ID集合** 映射表（Python dict 或 Redis）：
+维护内存中 **类别→ID集合** 映射表，用于仓库浏览页面按类别筛选：
 
 ```
 类别映射: {
-    "螺栓": [id_1, id_5, id_23, ...],
-    "齿轮": [id_2, id_8, id_15, ...],
+    "夹线器": [id_1, id_5, ...],
+    "压缩弹簧": [id_2, id_8, ...],
     ...
 }
 ```
 
-检索流程：
-1. 百炼API返回类别 → 从映射表获取该类别下的所有ID
-2. FAISS `search` 后按ID过滤，只保留目标类别的TopX结果
-3. >10k 全库检索缩小到几百条类别范围内
+**关键修复**：服务器重启后 FAISS load() 只恢复索引结构，不填充占位零向量到 _vectors 字典（此前的占位零向量曾导致重建索引时使用零向量，引发 L2=0.0 匹配错误ID的严重bug）。类别映射从 metadata 数据库重建。
 
 ### 实时更新机制
 
 学习端每上传一条新记录：
 
-1. DINOv2提取特征 → `faiss_index.add_with_ids(vector, new_id)`
-2. 元数据写入存储 → 关联 `new_id`
-3. 类别映射表更新 → `category_map[category].append(new_id)`
-4. 全部操作在单次事务内完成，写入后立即可检索
-
-累计新增数据超过原始数据的20%时，触发后台索引重建（重新聚类），重建期间旧索引继续服务，新索引替换后无缝切换。
+1. DINOv2提取特征 → IndexIDMap.add_with_ids(vector, new_id)
+2. 自动保存索引到磁盘（每次add后立即save）
+3. 元数据写入SQLite → 关联 new_id
+4. 类别映射表更新 → category_map[category].add(new_id)
+5. 全部操作完成后立即可检索
 
 ## 5. 异常处理与边界情况
 
@@ -116,66 +106,140 @@ FAISS向量库模块和元数据存储模块解耦：FAISS只存向量+ID+类别
 
 | 异常场景 | 处理策略 |
 |----------|----------|
-| YOLO未检测到目标区域 | 返回"未检测到目标"提示，不进入后续流程，避免无效API调用 |
-| 百炼API调用超时/失败 | 降级：跳过类别预过滤，直接在FAISS全库做向量检索，精度略降但保证可用 |
-| 百炼API返回未知类别 | 降级：按无类别做全库检索，日志记录未知类别供后续分析 |
-| DINOv2特征提取失败 | 返回"特征提取异常"错误，不做FAISS检索，避免错误向量匹配 |
-| FAISS检索无结果 | 返回"未找到匹配项"提示，可选附带Top3近似结果供人工判断 |
+| 百炼API调用超时/失败 | 降级：跳过类别参考，FAISS全库向量检索，前端显示降级标识 |
+| 百炼API返回未知类别 | 正常返回检索结果，前端显示百炼判断类别供参考 |
+| DINOv2特征提取失败 | 返回"特征提取异常"错误，不做FAISS检索 |
+| FAISS检索无结果 | 返回"未找到匹配项"提示 |
 
 ### 学习端异常处理
 
 | 异常场景 | 处理策略 |
 |----------|----------|
 | 图像增强失败 | 跳过增强步骤，使用原始图片继续后续流程 |
-| YOLO未检测到目标 | 标记为"待人工审核"，不写入底库，避免脏数据 |
-| 元数据字段缺失（类别/规格为空） | 标记为"待补全"，写入底库但不参与类别预过滤（归入"未分类"桶） |
+| 元数据字段缺失（类别/规格为空） | 前端表单校验阻止提交 |
 
-**降级核心原则**：使用端优先保证"有结果返回"而非"无响应"。百炼API是最容易出问题的环节，类别预过滤设计为**可选增强**而非**必选依赖**，API不可用时自动降级到全库向量检索。
+**降级核心原则**：使用端优先保证"有结果返回"。百炼API是参考增强而非必选依赖，不可用时自动降级到全库检索。
 
-## 6. 测试策略（小数据集启动）
+### FAISS数据一致性
 
-当前约束：初始24张照片（6组×4张），底库由客户后续自行上传填充。
+| 异常场景 | 处理策略 |
+|----------|----------|
+| FAISS索引文件丢失 | 启动时从metadata数据库重建（rebuild_faiss.py脚本） |
+| 进程被杀导致索引未保存 | 每次add后自动save，并提供rebuild_faiss.py批量重建脚本 |
+| 数据库计数与FAISS计数不一致 | health接口暴露db_count和faiss_count供监控 |
+| 重复图片导致IndexIDMap只返回一个ID | metadata标记重复记录为deleted状态 |
 
-YOLO和DINOv2使用预训练模型零样本启动，百炼API大模型泛化能力不需要本地训练数据。
+## 6. 前端架构
 
-| 测试阶段 | 内容 | 数据需求 |
-|----------|------|----------|
-| 模块单元测试 | 各模块能正常跑通流程，不崩溃 | 3-5张图片即可 |
-| 功能验证 | 学习端上传→底库写入→使用端检索→返回结果，完整链路贯通 | 24张图片，覆盖6个类别 |
-| 精度评估 | 验证"同类能召回、异类不误匹配"，每组内2张同类图验证召回 | 同类别至少2张图验证召回 |
-| 性能验证 | 测量单次检索响应时间，确认<5s | 1张查询图即可 |
-| 降级验证 | 模拟百炼API不可用，全库检索仍返回结果 | 1张查询图即可 |
-| 实时性验证 | 学习端上传1条→使用端立即可检索到 | 1张新图即可 |
+### 技术选型
 
-## 7. 客户端自助上传与系统交付形态
+| 层面 | 技术 | 说明 |
+|------|------|------|
+| 框架 | Vue 3 + Vite | SFC单文件组件，Composition API（script setup） |
+| 状态管理 | Pinia | 跨组件共享 dbCount、categories、isScanning |
+| 路由 | Vue Router 4 | history模式，/learn /search /warehouse |
+| HTTP客户端 | Axios | baseURL=/api，Vite开发代理转发到后端 |
+| 设计风格 | 工业精度仪表盘 | 钨钢黑 + 钢蓝 + 金色点缀 |
 
-### 学习端上传流程（面向客户）
+### 页面功能
+
+| 页面 | 路径 | 功能 |
+|------|------|------|
+| 学习端 | /learn | 批量图片上传 + 类别/规格元数据表单 + 上传结果反馈 + 底库状态 |
+| 使用端 | /search | 查询图片上传 + Top-K设置 + 相似度结果（相对缩放：最佳=100%，最差=0%） + 百炼类别参考 + 降级标识 |
+| 仓库 | /warehouse | 底库浏览 + 类别筛选 + 图片缩略图 + 规格描述 |
+
+### 相似度展示策略
+
+FAISS返回L2距离（越小越相似），前端使用相对缩放：
+
+- 最佳匹配（最小L2）= 100%
+- 最差匹配（最大L2）= 0%
+- 中间值线性插值
+
+这避免了固定maxDist公式在不同数据分布下失效的问题。
+
+## 7. 部署架构
+
+### Docker Compose 部署
+
+| 服务 | 容器 | 说明 |
+|------|------|------|
+| backend | Python 3.11 + uvicorn | FastAPI服务，端口8000，数据卷持久化 |
+| frontend | Node 20构建 → nginx | Vue 3 SPA静态文件 + API反向代理，端口80 |
+
+### Nginx 配置
+
+- `try_files $uri $uri/ /index.html` — SPA history模式路由
+- `location /api/` → proxy_pass backend:8000 — API请求转发
+- `location /uploads/` → proxy_pass backend:8000 — 图片文件转发
+
+### 本地开发
+
+后端 `cd backend && python run.py`（端口8000），前端 `cd frontend && npm run dev`（端口3000，Vite代理转发API请求）。
+
+## 8. API接口
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/health` | GET | 系统状态（db_count, faiss_count, categories） |
+| `/api/learn/upload` | POST | 学习入库（multipart: image + category + specification + description） |
+| `/api/search/query` | POST | 相似度检索（multipart: image + top_k） |
+| `/api/warehouse/list` | GET | 仓库浏览（返回所有活跃记录） |
+
+## 9. 项目结构
 
 ```
-客户操作：上传图片 + 填写元数据（类别、规格、描述等）
-          ↓
-系统自动：图像增强 → YOLO裁剪 → DINOv2特征提取 → FAISS+元数据写入
-          ↓
-结果反馈：成功入库 / YOLO未检测到目标需人工确认
+planforme/
+├── backend/                  # FastAPI 后端
+│   ├── app/
+│   │   ├── main.py           # 入口（CORS、路由、lifespan、类别映射重建）
+│   │   ├── config.py         # 配置（路径、模型参数、API密钥从.env加载）
+│   │   ├── routers/
+│   │   │   ├── health.py     # /api/health
+│   │   │   ├── learn.py      # /api/learn/upload
+│   │   │   ├── search.py     # /api/search/query
+│   │   │   └── warehouse.py  # /api/warehouse/list
+│   │   ├── services/
+│   │   │   ├── enhance.py    # 图像增强
+│   │   │   ├── dinov2.py     # DINOv2特征提取（整图）
+│   │   │   ├── bailian.py    # 百炼API类别判断（参考）
+│   │   │   ├── vector_store.py  # FAISS索引管理（IndexIDMap + 类别映射 + 重建）
+│   │   │   ├── metadata_store.py  # SQLite元数据存储
+│   │   │   └── pipeline.py   # 学习端+使用端管道编排
+│   │   └── models/
+│   │       └── schemas.py    # Pydantic数据模型
+│   ├── data/                 # 运行时数据（SQLite + FAISS + uploads）
+│   ├── rebuild_faiss.py      # 批量重建索引脚本
+│   ├── requirements.txt
+│   ├── run.py                # 本地启动入口
+│   ├── Dockerfile
+│   └── .env                  # API密钥配置
+├── frontend/                 # Vue 3 + Vite 前端
+│   ├── src/
+│   │   ├── App.vue           # 主布局（导航栏 + 扫描动画 + 系统状态）
+│   │   ├── views/            # 页面组件（Composition API script setup）
+│   │   ├── stores/           # Pinia状态管理
+│   │   ├── router/           # Vue Router 4 history模式
+│   │   ├── api/              # Axios客户端
+│   │   └── assets/styles/    # CSS（工业精度仪表盘风格）
+│   ├── vite.config.js        # 开发代理配置
+│   ├── Dockerfile            # 多阶段构建（Node → nginx）
+│   └── package.json
+├── nginx.conf                # Nginx配置（SPA + API反向代理）
+├── docker-compose.yml        # Docker Compose编排
+└── README.md                 # 运行说明文档
 ```
 
-客户只需上传图片和填写基本信息，后续所有处理全自动。
+## 10. 技术栈
 
-### 系统交付形态
-
-| 组件 | 交付方式 | 说明 |
-|------|----------|------|
-| 学习端Web界面 | 内网部署的前端页面 | 图片上传 + 元数据表单，处理结果实时反馈 |
-| 使用端Web界面 | 内网部署的前端页面 | 图片上传检索，展示TopX匹配结果及完整图文信息 |
-| 后端API服务 | 内网部署的Python服务 | 编排学习端和使用端管道 |
-| YOLO推理服务 | 本地GPU部署 | 预训练YOLOv8通用模型，后续按需微调 |
-| DINOv2特征服务 | 本地GPU部署 | dinov2_vitl14预训练模型 |
-| FAISS向量库 | 同后端服务进程内 | 内存中运行，支持动态添加 |
-| 元数据存储 | SQLite（轻量）或PostgreSQL（如已有） | 存储完整图文信息 |
-| 百炼API调用 | 通过内网出口调用 | 阿里百炼多模态API |
-
-### 交付里程碑
-
-1. **MVP阶段**：学习端上传+使用端检索完整链路贯通，YOLO/DINOv2预训练模型，24张照片验证功能可用
-2. **优化阶段**：客户开始大量上传，根据实际数据反馈优化YOLO（微调）和FAISS索引参数（nprobe等）
-3. **规模化阶段**：底库>10k后，必要时触发FAISS索引重建策略，确保检索性能不衰减
+| 层面 | 技术 | 版本/说明 |
+|------|------|----------|
+| 后端框架 | FastAPI | Python 3.11 |
+| 特征提取 | DINOv2 vitl14 | torch, 1024维特征 |
+| 向量检索 | FAISS | IndexIDMap(IndexFlatL2/IndexIVFFlat), faiss-cpu |
+| 类别参考 | 阿里百炼API | dashscope, qwen-vl-max-latest |
+| 元数据 | SQLite | metadata.db |
+| 前端框架 | Vue 3 + Vite | Composition API, Pinia, Vue Router 4 |
+| HTTP | Axios | baseURL=/api |
+| 部署 | Docker Compose | nginx + FastAPI |
