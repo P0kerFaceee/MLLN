@@ -37,7 +37,7 @@ class VectorStore:
                 logger.info(f"使用IVF+IDMap索引，训练完成（数据量{total} >= nlist={self.nlist}）")
 
     def add(self, vector: np.ndarray, id: int, category: str):
-        """动态添加向量到索引，同时更新类别映射表。"""
+        """动态添加向量到索引，同时更新类别映射表。每次添加后自动持久化。"""
         vector = vector.astype(np.float32).reshape(1, -1)
         self._vectors[id] = vector.squeeze()
         if category not in self._category_map:
@@ -46,6 +46,7 @@ class VectorStore:
 
         self._ensure_index()
         self._index.add_with_ids(vector, np.array([id], dtype=np.int64))
+        self.save()
         logger.info(f"向量添加成功: id={id}, category={category}")
 
     def search(self, query: np.ndarray, category: str | None = None, top_k: int = 10) -> tuple[list[int], list[float]]:
@@ -90,6 +91,22 @@ class VectorStore:
         """从磁盘加载FAISS索引。"""
         if FAISS_INDEX_PATH.exists():
             self._index = faiss.read_index(str(FAISS_INDEX_PATH))
-            logger.info(f"FAISS索引已加载: {FAISS_INDEX_PATH}, 向量数={self._index.ntotal}")
+            ntotal = self._index.ntotal
+            if hasattr(self._index, 'id_map') and ntotal > 0:
+                ids = faiss.vector_to_array(self._index.id_map).astype(np.int64)
+                for id_ in ids:
+                    self._vectors[int(id_)] = np.zeros(self.dim, dtype=np.float32)
+            logger.info(f"FAISS索引已加载: {FAISS_INDEX_PATH}, 向量数={ntotal}")
         else:
             logger.info("FAISS索引文件不存在，将在首次添加时创建")
+
+    def rebuild_category_map(self, records: list[dict]):
+        """从metadata数据库记录重建类别映射表（服务器重启后调用）。"""
+        self._category_map.clear()
+        for r in records:
+            cat = r["category"]
+            id_ = r["id"]
+            if cat not in self._category_map:
+                self._category_map[cat] = set()
+            self._category_map[cat].add(id_)
+        logger.info(f"类别映射已重建: {len(self._category_map)} 个类别, 共 {len(records)} 条记录")

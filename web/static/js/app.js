@@ -327,6 +327,8 @@ const SearchPage = {
             this.queryImage = f;
             this.queryPreview = URL.createObjectURL(f);
             this.results = [];
+            this.queryCategory = null;
+            this.degraded = false;
             this.searchDone = false;
         },
         async doSearch() {
@@ -351,16 +353,105 @@ const SearchPage = {
             this.searchDone = true;
         },
         similarityPercent(sim) {
-            // FAISS L2 distance: lower = more similar. Convert to percentage-like visual
-            // Assume max reasonable distance ~2000, invert for display
-            const maxDist = 2000;
-            const pct = Math.max(0, Math.min(100, (1 - sim / maxDist) * 100));
+            // FAISS L2 distance: lower = more similar
+            // Use relative scaling: best match = 100%, worst = 0%
+            if (!this.results.length) return 0;
+            const best = Math.min(...this.results.map(r => r.similarity));
+            const worst = Math.max(...this.results.map(r => r.similarity));
+            if (worst <= best) return sim <= best ? 100 : 0;
+            const pct = Math.max(0, Math.min(100, (1 - (sim - best) / (worst - best)) * 100));
             return pct;
         },
         formatSimilarity(sim) {
-            const maxDist = 2000;
-            const pct = Math.max(0, Math.min(100, (1 - sim / maxDist) * 100));
+            if (!this.results.length) return '0%';
+            const best = Math.min(...this.results.map(r => r.similarity));
+            const worst = Math.max(...this.results.map(r => r.similarity));
+            if (worst <= best) return sim <= best ? '100%' : '0%';
+            const pct = Math.max(0, Math.min(100, (1 - (sim - best) / (worst - best)) * 100));
             return pct.toFixed(1) + '%';
+        },
+        handleImgError(e) {
+            e.target.src = '';
+            e.target.style.background = 'var(--surface-2)';
+            e.target.alt = '图片加载失败';
+        },
+    },
+};
+
+// ---- Warehouse Page Component ----
+const WarehousePage = {
+    template: `
+        <div>
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-header-icon">⊞</span>
+                    <span class="panel-title">仓库底库浏览</span>
+                    <span class="panel-badge">{{ items.length }} 条记录</span>
+                    <button class="btn btn-outline" style="margin-left:auto;padding:6px 12px;font-size:12px"
+                        @click="loadItems">↻ 刷新</button>
+                </div>
+                <div class="panel-body">
+                    <!-- Category Filter -->
+                    <div class="flex-row gap-8 mb-16">
+                        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px"
+                            :class="{ 'btn-accent': activeCategory === null }"
+                            @click="activeCategory = null">全部</button>
+                        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px"
+                            v-for="cat in $root.categories"
+                            :class="{ 'btn-accent': activeCategory === cat }"
+                            @click="activeCategory = cat">{{ cat }}</button>
+                    </div>
+
+                    <!-- Items Grid -->
+                    <div class="result-grid" v-if="filteredItems.length">
+                        <div class="result-card" v-for="(item, i) in filteredItems"
+                            :style="{ '--delay': i }">
+                            <img class="result-card-image" :src="item.image_url"
+                                @error="handleImgError">
+                            <div class="result-card-body">
+                                <div class="result-card-meta">
+                                    <span class="result-card-category">{{ item.category }}</span>
+                                    <span class="result-card-spec">{{ item.specification }}</span>
+                                </div>
+                                <div class="result-card-desc" v-if="item.description">{{ item.description }}</div>
+                                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted)">
+                                    ID:{{ item.id }} · {{ item.created_at || '' }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="empty-state" v-if="!filteredItems.length && items.length">
+                        <div class="empty-state-icon">⊘</div>
+                        <div class="empty-state-text">该类别下暂无记录</div>
+                    </div>
+
+                    <div class="empty-state" v-if="!items.length">
+                        <div class="empty-state-icon">⊞</div>
+                        <div class="empty-state-text">仓库为空，请先在学习端上传零件数据</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    data() {
+        return { items: [], activeCategory: null };
+    },
+    computed: {
+        filteredItems() {
+            if (!this.activeCategory) return this.items;
+            return this.items.filter(i => i.category === this.activeCategory);
+        },
+    },
+    created() { this.loadItems(); },
+    methods: {
+        async loadItems() {
+            try {
+                const res = await api.get('/warehouse/list');
+                this.items = res.data.items;
+            } catch (err) {
+                console.error('Failed to load warehouse items', err);
+            }
         },
         handleImgError(e) {
             e.target.src = '';
@@ -375,6 +466,7 @@ const router = new VueRouter({
     routes: [
         { path: '/learn', component: LearnPage },
         { path: '/search', component: SearchPage },
+        { path: '/warehouse', component: WarehousePage },
         { path: '/', redirect: '/learn' },
     ],
 });
@@ -392,11 +484,16 @@ new Vue({
     created() {
         this.fetchHealth();
     },
+    watch: {
+        '$route'() {
+            this.fetchHealth();
+        },
+    },
     methods: {
         async fetchHealth() {
             try {
                 const res = await axios.get('/health');
-                this.dbCount = res.data.faiss_count;
+                this.dbCount = res.data.db_count;
                 this.categories = res.data.categories;
                 this.systemOnline = true;
             } catch {

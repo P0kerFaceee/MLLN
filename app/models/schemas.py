@@ -37,6 +37,20 @@ class SearchResponse(BaseModel):
     message: str
 
 
+class WarehouseItem(BaseModel):
+    id: int
+    category: str
+    specification: str
+    description: Optional[str]
+    image_url: str
+    created_at: Optional[str]
+
+
+class WarehouseResponse(BaseModel):
+    items: list[WarehouseItem]
+    total: int
+
+
 class HealthResponse(BaseModel):
     status: str
     db_count: int

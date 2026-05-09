@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from PIL import Image
 import io
 from app.models.schemas import SearchResponse, SearchResult
@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/query", response_model=SearchResponse)
 async def search_item(
     image: UploadFile = File(..., description="待检索图片"),
-    top_k: int = Form(default=10, description="返回TopK结果数量"),
+    top_k: int = Form(default=10, ge=1, le=50, description="返回TopK结果数量"),
 ):
     image_bytes = await image.read()
     pil_image = Image.open(io.BytesIO(image_bytes))
