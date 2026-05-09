@@ -4,9 +4,9 @@
 *.onnx
 
 # Runtime data
-data/db/
-data/faiss/
-data/uploads/
+backend/data/db/
+backend/data/faiss/
+backend/data/uploads/
 
 # Python
 __pycache__/
@@ -15,6 +15,10 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
 
 # IDE
 .vscode/
@@ -27,8 +31,11 @@ Thumbs.db
 # Environment
 .env
 
-# pytest
-.pytest_cache/
+# Playwright MCP
+.playwright-mcp/
+
+# Claude
+.claude/
 
 # Torch cache (auto-downloaded models)
 *.tar.gz

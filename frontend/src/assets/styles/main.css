@@ -1,29 +1,3 @@
-/* ============================================
-   MLLN - Industrial Precision Dashboard
-   Color: Dark tungsten + steel blue + gold accent
-   Typography: Rajdhani / IBM Plex Sans / JetBrains Mono
-   ============================================ */
-
-:root {
-    --base: #0b0e13;
-    --surface: #141820;
-    --surface-2: #1c2230;
-    --border: #2a3040;
-    --border-light: #3a4558;
-    --primary: #5b9bd5;
-    --primary-dim: #3d6e9e;
-    --accent: #d4a843;
-    --accent-dim: #a07828;
-    --success: #43a047;
-    --error: #e53935;
-    --warning: #ff9800;
-    --text-primary: #e2e5eb;
-    --text-secondary: #8a92a4;
-    --text-muted: #555d6e;
-    --scan-color: rgba(91, 155, 213, 0.12);
-    --grid-color: rgba(42, 48, 64, 0.35);
-}
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
@@ -175,7 +149,7 @@ body::after {
     margin: 0 auto;
 }
 
-/* ---- Panel / Card ---- */
+/* ---- Panel ---- */
 .panel {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -406,17 +380,23 @@ body::after {
     background: rgba(91,155,213,0.06);
 }
 
-/* ---- Learning Page Layout ---- */
+/* ---- Layouts ---- */
 .learn-layout {
     display: grid;
     grid-template-columns: 1fr 320px;
     gap: 20px;
 }
+.search-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+}
 @media (max-width: 900px) {
     .learn-layout { grid-template-columns: 1fr; }
+    .search-layout { grid-template-columns: 1fr; }
 }
 
-/* ---- Results Section ---- */
+/* ---- Results ---- */
 .results-header {
     display: flex;
     align-items: center;
@@ -509,15 +489,7 @@ body::after {
     text-align: right;
 }
 
-/* ---- Search Layout ---- */
-.search-layout {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 20px;
-}
-@media (max-width: 900px) {
-    .search-layout { grid-template-columns: 1fr; }
-}
+/* ---- Search specifics ---- */
 .search-query-img {
     width: 100%;
     max-height: 240px;
@@ -537,7 +509,6 @@ body::after {
     background: rgba(212,168,67,0.08);
     border: 1px solid var(--accent-dim);
     border-radius: 4px;
-    margin-top: 12px;
 }
 .search-degraded-badge {
     color: var(--warning);

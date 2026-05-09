@@ -1,0 +1,19 @@
+:root {
+    --base: #0b0e13;
+    --surface: #141820;
+    --surface-2: #1c2230;
+    --border: #2a3040;
+    --border-light: #3a4558;
+    --primary: #5b9bd5;
+    --primary-dim: #3d6e9e;
+    --accent: #d4a843;
+    --accent-dim: #a07828;
+    --success: #43a047;
+    --error: #e53935;
+    --warning: #ff9800;
+    --text-primary: #e2e5eb;
+    --text-secondary: #8a92a4;
+    --text-muted: #555d6e;
+    --scan-color: rgba(91, 155, 213, 0.12);
+    --grid-color: rgba(42, 48, 64, 0.35);
+}
