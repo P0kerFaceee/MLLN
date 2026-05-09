@@ -7,10 +7,8 @@ from app.config import DINOV2_FEATURE_DIM
 
 def test_learn_pipeline_success():
     img = Image.fromarray(np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8))
-    mock_crop = Image.fromarray(np.random.randint(0, 255, (200, 200, 3), dtype=np.uint8))
 
     with patch("app.services.pipeline.enhance_image", return_value=img), \
-         patch("app.services.pipeline.yolo_detect_and_crop", return_value=(mock_crop, [])), \
          patch("app.services.pipeline.extract_features", return_value=np.random.randn(DINOV2_FEATURE_DIM).astype(np.float32)), \
          patch("app.services.pipeline.vector_store") as mock_vs, \
          patch("app.services.pipeline.metadata_store") as mock_ms:
@@ -22,24 +20,12 @@ def test_learn_pipeline_success():
         mock_ms.add.assert_called_once()
 
 
-def test_learn_pipeline_yolo_no_detection():
-    img = Image.fromarray(np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8))
-
-    with patch("app.services.pipeline.enhance_image", return_value=img), \
-         patch("app.services.pipeline.yolo_detect_and_crop", return_value=None):
-
-        result = learn_pipeline(image=img, category="螺栓", specification="M10x30", description="", image_path="/uploads/bolt1.png")
-        assert result["status"] == "pending_review"
-
-
 def test_search_pipeline_success():
     img = Image.fromarray(np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8))
-    mock_crop = Image.fromarray(np.random.randint(0, 255, (200, 200, 3), dtype=np.uint8))
     mock_vec = np.random.randn(DINOV2_FEATURE_DIM).astype(np.float32)
     mock_search_result = ([1, 2, 3], [0.1, 0.2, 0.3])
 
-    with patch("app.services.pipeline.yolo_detect_and_crop", return_value=(mock_crop, [])), \
-         patch("app.services.pipeline.classify_category", return_value="螺栓"), \
+    with patch("app.services.pipeline.classify_category", return_value="螺栓"), \
          patch("app.services.pipeline.extract_features", return_value=mock_vec), \
          patch("app.services.pipeline.vector_store") as mock_vs, \
          patch("app.services.pipeline.metadata_store") as mock_ms:
@@ -59,11 +45,9 @@ def test_search_pipeline_success():
 
 def test_search_pipeline_bailian_degraded():
     img = Image.fromarray(np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8))
-    mock_crop = Image.fromarray(np.random.randint(0, 255, (200, 200, 3), dtype=np.uint8))
     mock_vec = np.random.randn(DINOV2_FEATURE_DIM).astype(np.float32)
 
-    with patch("app.services.pipeline.yolo_detect_and_crop", return_value=(mock_crop, [])), \
-         patch("app.services.pipeline.classify_category", return_value=None), \
+    with patch("app.services.pipeline.classify_category", return_value=None), \
          patch("app.services.pipeline.extract_features", return_value=mock_vec), \
          patch("app.services.pipeline.vector_store") as mock_vs, \
          patch("app.services.pipeline.metadata_store") as mock_ms:
