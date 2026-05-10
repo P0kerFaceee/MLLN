@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,6 +6,16 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import learn, search, health, warehouse
 from app.services.pipeline import vector_store, metadata_store
 from app.config import UPLOAD_DIR
+
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),  # 输出到控制台
+    ]
+)
 
 
 @asynccontextmanager
