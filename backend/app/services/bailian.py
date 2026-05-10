@@ -35,7 +35,7 @@ def _call_api(image: Image.Image) -> object:
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
-                    {"type": "text", "text": "请判断这张图片中零件的类别，只返回类别名称，不要解释。"},
+                    {"type": "text", "text": "你是绣机零件专家，请判断这张图片中零件的类别，只返回类别名称，不要解释。"},
                 ],
             }
         ],

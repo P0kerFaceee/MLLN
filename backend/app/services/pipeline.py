@@ -37,7 +37,7 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
     features = extract_features(enhanced)
 
     # 全库向量检索（DINOv2特征本身具备相似度匹配能力，百炼类别仅作参考展示）
-    ids, similarities = vector_store.search(query=features, category=None, top_k=top_k)
+    ids, similarities = vector_store.search(query=features, category=category, top_k=top_k)
 
     if len(ids) == 0:
         return {"results": [], "query_category": category, "degraded": category is None, "message": "未找到匹配项"}
