@@ -29,22 +29,32 @@ def learn_pipeline(image: Image.Image, category: str, specification: str, descri
 
 
 def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dict:
-    """使用端管道：百炼API(类别参考)→DINOv2→FAISS全库检索→元数据取回（整图提取特征）。"""
+    """使用端管道：百炼API类别→FAISS检索→元数据取回。
+    百炼类别精确匹配底库时按类别预过滤，否则降级为全库检索。"""
     enhanced = enhance_image(image)
 
     category = classify_category(enhanced)
 
     features = extract_features(enhanced)
+    logger.info(f"搜索特征向量范数: {np.linalg.norm(features):.2f}")
 
-    # 全库向量检索（DINOv2特征本身具备相似度匹配能力，百炼类别仅作参考展示）
-    ids, similarities = vector_store.search(query=features, category=category, top_k=top_k)
+# 百炼类别精确匹配底库时按类别预过滤
+    if category is not None and category in vector_store.get_categories():
+        ids, similarities = vector_store.search(query=features, category=category, top_k=top_k)
+        degraded = False
+    else:
+        # 百炼类别未匹配或不可用，降级为全库检索
+        ids, similarities = vector_store.search(query=features, category=None, top_k=top_k)
+        degraded = True
 
     if len(ids) == 0:
-        return {"results": [], "query_category": category, "degraded": category is None, "message": "未找到匹配项"}
+        return {"results": [], "query_category": category, "degraded": degraded, "message": "未找到匹配项"}
 
     records = metadata_store.get_batch(ids)
+    record_map = {r["id"]: r for r in records}
     results = []
-    for record, sim in zip(records, similarities):
+    for id_, sim in zip(ids, similarities):
+        record = record_map[id_]
         results.append({
             "id": record["id"],
             "category": record["category"],
@@ -57,6 +67,6 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
     return {
         "results": results,
         "query_category": category,
-        "degraded": category is None,
-        "message": f"检索完成，返回{len(results)}条结果" + ("（百炼API降级）" if category is None else ""),
+        "degraded": degraded,
+        "message": f"检索完成，返回{len(results)}条结果" + ("（百炼类别未匹配底库，全库检索）" if degraded and category else "（百炼API降级，全库检索）" if degraded else ""),
     }

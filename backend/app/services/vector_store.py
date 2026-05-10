@@ -62,6 +62,8 @@ class VectorStore:
         search_k = top_k * 5 if category else top_k
         distances, ids = self._index.search(query, search_k)
 
+        logger.info(f"FAISS raw search: search_k={search_k}, top5 IDs={ids[0][:5].tolist()}, D={distances[0][:5].tolist()}")
+
         result_ids = []
         result_sims = []
         for dist, id_ in zip(distances[0], ids[0]):
@@ -92,16 +94,10 @@ class VectorStore:
             logger.info(f"FAISS索引已保存: {FAISS_INDEX_PATH}")
 
     def load(self):
-        """从磁盘加载FAISS索引。"""
+        """从磁盘加载FAISS索引。不在_vectors中填充占位符，避免重建索引时使用零向量。"""
         if FAISS_INDEX_PATH.exists():
             self._index = faiss.read_index(str(FAISS_INDEX_PATH))
-            ntotal = self._index.ntotal
-            # Populate _vectors with placeholder so get_total_count works
-            if hasattr(self._index, 'id_map') and ntotal > 0:
-                ids = faiss.vector_to_array(self._index.id_map).astype(np.int64)
-                for id_ in ids:
-                    self._vectors[int(id_)] = np.zeros(self.dim, dtype=np.float32)
-            logger.info(f"FAISS索引已加载: {FAISS_INDEX_PATH}, 向量数={ntotal}")
+            logger.info(f"FAISS索引已加载: {FAISS_INDEX_PATH}, 向量数={self._index.ntotal}")
         else:
             logger.info("FAISS索引文件不存在，将在首次添加时创建")
 
