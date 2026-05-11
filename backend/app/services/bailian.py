@@ -44,9 +44,9 @@ def _call_api(image: Image.Image, prompt: str) -> object:
 
 
 def _get_categories() -> list[str]:
-    """延迟获取底库类别列表，避免循环导入。"""
-    from app.services.pipeline import vector_store
-    return vector_store.get_categories()
+    """延迟获取底库类别列表。"""
+    from app.services.pipeline import part_store
+    return part_store.get_categories()
 
 
 def classify_category(image: Image.Image) -> str | None:
