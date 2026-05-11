@@ -381,18 +381,12 @@ body::after {
 }
 
 /* ---- Layouts ---- */
-.learn-layout {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: 20px;
-}
 .search-layout {
     display: grid;
     grid-template-columns: 280px 1fr;
     gap: 20px;
 }
 @media (max-width: 900px) {
-    .learn-layout { grid-template-columns: 1fr; }
     .search-layout { grid-template-columns: 1fr; }
 }
 
