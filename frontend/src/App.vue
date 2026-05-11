@@ -30,9 +30,6 @@ watch(route, () => system.fetchHealth())
       </div>
     </div>
     <nav class="header-nav">
-      <router-link to="/learn" class="nav-link" :class="{ active: route.path === '/learn' }">
-        <span class="nav-icon">◈</span> 学习端
-      </router-link>
       <router-link to="/search" class="nav-link" :class="{ active: route.path === '/search' }">
         <span class="nav-icon">◉</span> 使用端
       </router-link>
@@ -42,8 +39,12 @@ watch(route, () => system.fetchHealth())
     </nav>
     <div class="header-status">
       <div class="status-item">
-        <span class="status-label">DB</span>
-        <span class="status-value">{{ system.dbCount }}</span>
+        <span class="status-label">零件</span>
+        <span class="status-value">{{ system.partsCount }}</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">照片</span>
+        <span class="status-value">{{ system.photosCount }}</span>
       </div>
       <div class="status-dot" :class="{ online: system.systemOnline }"></div>
     </div>

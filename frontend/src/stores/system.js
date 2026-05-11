@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import api from '../api'
-import axios from 'axios'
 
 export const useSystemStore = defineStore('system', {
   state: () => ({
-    dbCount: 0,
+    partsCount: 0,
+    photosCount: 0,
     categories: [],
     systemOnline: false,
     isScanning: false,
@@ -13,7 +13,8 @@ export const useSystemStore = defineStore('system', {
     async fetchHealth() {
       try {
         const res = await api.get('/health')
-        this.dbCount = res.data.db_count
+        this.partsCount = res.data.parts_count
+        this.photosCount = res.data.photos_count
         this.categories = res.data.categories
         this.systemOnline = true
       } catch {
