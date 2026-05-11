@@ -45,5 +45,9 @@ export const useWarehouseStore = defineStore('warehouse', {
       await api.post(`/warehouse/parts/${partId}/photos`, formData)
       await this.fetchPartDetail(partId)
     },
+    async createPart(formData) {
+      await api.post('/warehouse/parts', formData)
+      await this.fetchParts()
+    },
   },
 })
