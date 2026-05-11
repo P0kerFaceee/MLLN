@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useWarehouseStore } from '../stores/warehouse'
 import { useSystemStore } from '../stores/system'
 
@@ -60,6 +60,8 @@ function specSummary(specs) {
 
 // ---- Create-part modal ----
 const showModal = ref(false)
+const errorMsg = ref('')
+const createDragOver = ref(false)
 const createForm = ref({
   category: '',
   name: '',
@@ -74,6 +76,7 @@ const categoriesForDropdown = computed(() => system.categories || [])
 const specKeyOptions = computed(() => warehouse.specKeys || [])
 
 function openCreateModal() {
+  createPhotos.value.forEach(p => URL.revokeObjectURL(p.preview))
   createForm.value = {
     category: '',
     name: '',
@@ -81,8 +84,13 @@ function openCreateModal() {
     description: '',
   }
   createPhotos.value = []
+  errorMsg.value = ''
   showModal.value = true
 }
+
+onBeforeUnmount(() => {
+  createPhotos.value.forEach(p => URL.revokeObjectURL(p.preview))
+})
 
 function addSpecRow() {
   createForm.value.specs.push({ key: '', value: '' })
@@ -119,8 +127,12 @@ function removePhoto(index) {
 }
 
 async function submitCreate() {
-  if (!createForm.value.name.trim() || !createForm.value.category.trim()) return
+  if (!createForm.value.name.trim() || !createForm.value.category.trim()) {
+    errorMsg.value = '类别和零件名称为必填项'
+    return
+  }
   isCreating.value = true
+  errorMsg.value = ''
   const formData = new FormData()
   formData.append('name', createForm.value.name.trim())
   formData.append('category', createForm.value.category.trim())
@@ -142,10 +154,11 @@ async function submitCreate() {
 
   try {
     await warehouse.createPart(formData)
+    createPhotos.value.forEach(p => URL.revokeObjectURL(p.preview))
     showModal.value = false
     system.fetchHealth()
   } catch (err) {
-    console.error('Failed to create part', err)
+    errorMsg.value = warehouse.lastError || '创建失败'
   }
   isCreating.value = false
 }
@@ -158,6 +171,7 @@ function confirmDeletePart(partId) {
 }
 
 async function doDeletePart(partId) {
+  errorMsg.value = ''
   try {
     await warehouse.deletePart(partId)
     expandedId.value = null
@@ -165,7 +179,7 @@ async function doDeletePart(partId) {
     deletingId.value = null
     system.fetchHealth()
   } catch (err) {
-    console.error('Failed to delete part', err)
+    errorMsg.value = warehouse.lastError || '删除失败'
   }
 }
 
@@ -174,13 +188,25 @@ function cancelDeletePart() {
 }
 
 // ---- Delete photo ----
-async function deletePhoto(partId, photoId) {
+const deletingPhotoId = ref(null)
+
+function confirmDeletePhoto(partId, photoId) {
+  deletingPhotoId.value = photoId
+}
+
+async function doDeletePhoto(partId, photoId) {
+  errorMsg.value = ''
   try {
     await warehouse.deletePhoto(partId, photoId)
     expandedDetail.value = warehouse.currentPart
+    deletingPhotoId.value = null
   } catch (err) {
-    console.error('Failed to delete photo', err)
+    errorMsg.value = warehouse.lastError || '删除照片失败'
   }
+}
+
+function cancelDeletePhoto() {
+  deletingPhotoId.value = null
 }
 
 // ---- Add photo to existing part ----
@@ -204,6 +230,7 @@ function triggerAddPhotoInput() { addPhotoInput.value.click() }
 function handleAddPhotoSelect(e) {
   const f = e.target.files[0]
   if (f && f.type.startsWith('image/')) {
+    if (addPhotoPreview.value) URL.revokeObjectURL(addPhotoPreview.value)
     addPhotoFile.value = f
     addPhotoPreview.value = URL.createObjectURL(f)
   }
@@ -214,6 +241,7 @@ function handleAddPhotoDrop(e) {
   addPhotoDragOver.value = false
   const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'))
   if (f) {
+    if (addPhotoPreview.value) URL.revokeObjectURL(addPhotoPreview.value)
     addPhotoFile.value = f
     addPhotoPreview.value = URL.createObjectURL(f)
   }
@@ -222,6 +250,7 @@ function handleAddPhotoDrop(e) {
 async function submitAddPhoto(partId) {
   if (!addPhotoFile.value) return
   addPhotoUploading.value = true
+  errorMsg.value = ''
   const formData = new FormData()
   formData.append('image', addPhotoFile.value)
   formData.append('angle', addPhotoAngle.value || '')
@@ -234,7 +263,7 @@ async function submitAddPhoto(partId) {
     addPhotoPreview.value = ''
     system.fetchHealth()
   } catch (err) {
-    console.error('Failed to add photo', err)
+    errorMsg.value = warehouse.lastError || '上传照片失败'
   }
   addPhotoUploading.value = false
 }
@@ -273,8 +302,12 @@ function removeEditSpecRow(index) {
 }
 
 async function submitEdit(partId) {
-  if (!editForm.value.name.trim() || !editForm.value.category.trim()) return
+  if (!editForm.value.name.trim() || !editForm.value.category.trim()) {
+    errorMsg.value = '类别和零件名称为必填项'
+    return
+  }
   editSaving.value = true
+  errorMsg.value = ''
   const specsObj = {}
   editForm.value.specs.forEach(row => {
     if (row.key && row.value) specsObj[row.key] = row.value
@@ -290,7 +323,7 @@ async function submitEdit(partId) {
     expandedDetail.value = warehouse.currentPart
     editPanel.value = null
   } catch (err) {
-    console.error('Failed to update part', err)
+    errorMsg.value = warehouse.lastError || '更新失败'
   }
   editSaving.value = false
 }
@@ -301,8 +334,7 @@ function cancelEdit() {
 
 // ---- Init ----
 onMounted(async () => {
-  await warehouse.fetchSpecKeys()
-  await warehouse.fetchParts()
+  await Promise.allSettled([warehouse.fetchSpecKeys(), warehouse.fetchParts()])
 })
 </script>
 
@@ -315,9 +347,13 @@ onMounted(async () => {
       <button class="btn btn-primary" style="margin-left:auto;padding:6px 14px;font-size:13px"
         @click="openCreateModal">+ 新增零件</button>
       <button class="btn btn-outline" style="padding:6px 12px;font-size:12px"
-        @click="warehouse.fetchParts(); system.fetchHealth()">↻ 刷新</button>
+        @click="async () => { await warehouse.fetchParts(); await system.fetchHealth() }">↻ 刷新</button>
     </div>
     <div class="panel-body">
+      <!-- Error Banner -->
+      <div v-if="errorMsg" style="padding:8px 12px;background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.3);border-radius:4px;color:var(--error);font-size:12px;margin-bottom:12px">
+        {{ errorMsg }}
+      </div>
       <!-- Category Filter Tabs + Search -->
       <div class="flex-row gap-8 mb-16" style="flex-wrap:wrap">
         <button class="btn btn-outline" style="padding:5px 12px;font-size:12px"
@@ -369,7 +405,14 @@ onMounted(async () => {
                       style="width:100%;height:120px;object-fit:cover;border-radius:4px;border:1px solid var(--border);background:var(--surface-2)">
                     <div class="part-detail-photo-angle" v-if="photo.angle">{{ photo.angle }}</div>
                     <button class="preview-remove" style="top:4px;right:4px;width:20px;height:20px;font-size:10px"
-                      @click.stop="deletePhoto(part.id, photo.id)">×</button>
+                      @click.stop="confirmDeletePhoto(part.id, photo.id)">×</button>
+                    <div v-if="deletingPhotoId === photo.id" style="margin-top:4px;display:flex;gap:4px;align-items:center">
+                      <span style="color:var(--error);font-size:10px">确认删除?</span>
+                      <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;color:var(--error);border-color:var(--error)"
+                        @click.stop="doDeletePhoto(part.id, photo.id)">确认</button>
+                      <button class="btn btn-outline" style="padding:2px 6px;font-size:10px"
+                        @click.stop="cancelDeletePhoto">取消</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -521,6 +564,9 @@ onMounted(async () => {
           @click="showModal = false">×</button>
       </div>
       <div class="panel-body">
+        <div v-if="errorMsg" style="padding:8px 12px;background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.3);border-radius:4px;color:var(--error);font-size:12px;margin-bottom:12px">
+          {{ errorMsg }}
+        </div>
         <div class="form-group">
           <label class="form-label">类别 <span class="form-label-required">●</span></label>
           <input class="form-input" v-model="createForm.category" list="create-category-list"
@@ -557,8 +603,10 @@ onMounted(async () => {
         <div class="form-group">
           <label class="form-label">照片</label>
           <div class="upload-zone" style="padding:20px"
+            :class="{ 'drag-over': createDragOver }"
             @click="triggerPhotoInput"
-            @dragover.prevent
+            @dragover.prevent="createDragOver = true"
+            @dragleave="createDragOver = false"
             @drop.prevent="handlePhotoDrop">
             <div class="upload-zone-icon" style="font-size:28px">⬡</div>
             <div class="upload-zone-text">拖拽照片至此处 或 点击选择</div>

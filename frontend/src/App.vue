@@ -1,13 +1,12 @@
 <script setup>
 import { useSystemStore } from './stores/system'
 import { useRoute } from 'vue-router'
-import { watch, onMounted } from 'vue'
+import { onMounted } from 'vue'
 
 const system = useSystemStore()
 const route = useRoute()
 
 onMounted(() => system.fetchHealth())
-watch(route, () => system.fetchHealth())
 </script>
 
 <template>

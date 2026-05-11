@@ -43,7 +43,7 @@ function setQueryImage(f) {
 async function doSearch() {
   if (!queryImage.value) return
   isSearching.value = true
-  system.isScanning = true
+  system.setScanning(true)
   results.value = []
   const formData = new FormData()
   formData.append('image', queryImage.value)
@@ -56,10 +56,11 @@ async function doSearch() {
     emptyMessage.value = res.data.message
   } catch (err) {
     emptyMessage.value = '检索失败：' + (err.response?.data?.detail || err.message)
+  } finally {
+    isSearching.value = false
+    system.setScanning(false)
+    searchDone.value = true
   }
-  isSearching.value = false
-  system.isScanning = false
-  searchDone.value = true
 }
 
 function similarityPercent(sim) {

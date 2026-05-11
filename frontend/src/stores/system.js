@@ -17,9 +17,13 @@ export const useSystemStore = defineStore('system', {
         this.photosCount = res.data.photos_count
         this.categories = res.data.categories
         this.systemOnline = true
-      } catch {
+      } catch (err) {
         this.systemOnline = false
+        console.warn('Health check failed:', err.message)
       }
+    },
+    setScanning(val) {
+      this.isScanning = val
     },
   },
 })
