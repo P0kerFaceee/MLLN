@@ -40,8 +40,8 @@ class VectorStore:
                 self._index.add_with_ids(all_vecs, all_ids)
                 logger.info(f"使用IVF+IDMap索引，训练完成（数据量{total}）")
 
-    def add(self, vector: np.ndarray, id: int, category: str):
-        """动态添加向量到索引，同时更新类别映射表。"""
+    def add(self, vector: np.ndarray, id: int, category: str, part_id: int = None):
+        """动态添加向量到索引。part_id用于category_map关联。"""
         vector = vector.astype(np.float32).reshape(1, -1)
         self._vectors[id] = vector.squeeze()
         if category not in self._category_map:
@@ -78,6 +78,31 @@ class VectorStore:
                 break
 
         return result_ids, result_sims
+
+    def remove_ids(self, ids: list[int]):
+        """从索引中移除指定ID的向量（重建不含这些ID的索引）。"""
+        if self._index is None or self._index.ntotal == 0:
+            return
+        remaining_ids = []
+        remaining_vecs = []
+        id_map = self._index.id_map
+        for i in range(self._index.ntotal):
+            stored_id = id_map.at(i)
+            if stored_id not in ids and stored_id in self._vectors:
+                remaining_ids.append(stored_id)
+                remaining_vecs.append(self._vectors[stored_id])
+        if len(remaining_vecs) > 0:
+            all_vecs = np.stack(remaining_vecs).astype(np.float32)
+            all_ids_np = np.array(remaining_ids, dtype=np.int64)
+            flat = faiss.IndexFlatL2(self.dim)
+            self._index = faiss.IndexIDMap(flat)
+            self._index.add_with_ids(all_vecs, all_ids_np)
+        else:
+            self._index = None
+        for id_ in ids:
+            self._vectors.pop(id_, None)
+        self.save()
+        logger.info(f"已从索引移除 {len(ids)} 个向量，剩余 {len(self._vectors)} 个")
 
     def get_total_count(self) -> int:
         if self._index is not None:
