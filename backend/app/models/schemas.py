@@ -72,6 +72,7 @@ class SearchResult(BaseModel):
     best_photo_angle: str | None = None
     thumbnail_urls: list[str] = []
     total_photos: int
+    is_high_priority: bool = False
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]

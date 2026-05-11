@@ -88,9 +88,9 @@ class VectorStore:
         id_map = self._index.id_map
         for i in range(self._index.ntotal):
             stored_id = id_map.at(i)
-            if stored_id not in ids and stored_id in self._vectors:
+            if stored_id not in ids:
                 remaining_ids.append(stored_id)
-                remaining_vecs.append(self._vectors[stored_id])
+                remaining_vecs.append(self._vectors.get(stored_id, self._index.reconstruct(int(stored_id))))
         if len(remaining_vecs) > 0:
             all_vecs = np.stack(remaining_vecs).astype(np.float32)
             all_ids_np = np.array(remaining_ids, dtype=np.int64)
@@ -119,10 +119,16 @@ class VectorStore:
             logger.info(f"FAISS索引已保存: {FAISS_INDEX_PATH}")
 
     def load(self):
-        """从磁盘加载FAISS索引。不在_vectors中填充占位符，避免重建索引时使用零向量。"""
+        """从磁盘加载FAISS索引。重建_vectors字典以支持remove_ids和distance_stats。"""
         if FAISS_INDEX_PATH.exists():
             self._index = faiss.read_index(str(FAISS_INDEX_PATH))
-            logger.info(f"FAISS索引已加载: {FAISS_INDEX_PATH}, 向量数={self._index.ntotal}")
+            # Populate _vectors from FAISS index so remove_ids and _update_distance_stats work
+            id_map = self._index.id_map
+            for i in range(self._index.ntotal):
+                stored_id = id_map.at(i)
+                vec = self._index.reconstruct(int(stored_id))
+                self._vectors[stored_id] = vec
+            logger.info(f"FAISS索引已加载: {FAISS_INDEX_PATH}, 向量数={self._index.ntotal}, _vectors={len(self._vectors)}")
         else:
             logger.info("FAISS索引文件不存在，将在首次添加时创建")
 

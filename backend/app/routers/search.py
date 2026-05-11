@@ -29,6 +29,7 @@ async def search_item(
             best_photo_angle=r["best_photo_angle"],
             thumbnail_urls=r["thumbnail_urls"],
             total_photos=r["total_photos"],
+            is_high_priority=r["is_high_priority"],
         )
         for r in result["results"]
     ]
