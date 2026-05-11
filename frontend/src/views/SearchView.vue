@@ -15,6 +15,7 @@ const degraded = ref(false)
 const searchDone = ref(false)
 const emptyMessage = ref('')
 const fileInput = ref(null)
+const expandedPart = ref(null)
 
 function triggerFileInput() { fileInput.value.click() }
 
@@ -38,6 +39,7 @@ function setQueryImage(f) {
   queryCategory.value = null
   degraded.value = false
   searchDone.value = false
+  expandedPart.value = null
 }
 
 async function doSearch() {
@@ -63,21 +65,13 @@ async function doSearch() {
   }
 }
 
-function similarityPercent(sim) {
-  if (!results.value.length) return 0
-  const best = Math.min(...results.value.map(r => r.similarity))
-  const worst = Math.max(...results.value.map(r => r.similarity))
-  if (worst <= best) return sim <= best ? 100 : 0
-  return Math.max(0, Math.min(100, (1 - (sim - best) / (worst - best)) * 100))
+function toggleExpand(partId) {
+  expandedPart.value = expandedPart.value === partId ? null : partId
 }
 
-function formatSimilarity(sim) {
-  if (!results.value.length) return '0%'
-  const best = Math.min(...results.value.map(r => r.similarity))
-  const worst = Math.max(...results.value.map(r => r.similarity))
-  if (worst <= best) return sim <= best ? '100%' : '0%'
-  const pct = Math.max(0, Math.min(100, (1 - (sim - best) / (worst - best)) * 100))
-  return pct.toFixed(1) + '%'
+function specsEntries(specs) {
+  if (!specs || typeof specs !== 'object') return []
+  return Object.entries(specs)
 }
 
 function handleImgError(e) {
@@ -141,30 +135,72 @@ function handleImgError(e) {
     <!-- Right: Results -->
     <div>
       <div class="results-header" v-if="results.length">
-        <div class="panel-header-icon" style="color:var(--primary);font-size:16px">⊞</div>
-        <span style="font-family:'Rajdhani',sans-serif;font-weight:600;font-size:15px;color:var(--text-primary)">
-          匹配结果
-        </span>
-        <span class="results-count">{{ results.length }} 条匹配</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--primary);font-size:16px">⊞</span>
+          <span style="font-family:'Rajdhani',sans-serif;font-weight:600;font-size:15px;color:var(--text-primary)">
+            匹配结果
+          </span>
+        </div>
+        <span class="results-count">{{ results.length }} 条零件匹配</span>
       </div>
 
       <div class="result-grid" v-if="results.length">
-        <div class="result-card" v-for="(r, i) in results" :key="r.id"
-          :style="{ '--delay': i }">
-          <img class="result-card-image" :src="r.image_url"
-            @error="handleImgError">
+        <div class="result-card"
+          v-for="(r, i) in results" :key="r.part_id"
+          :class="{ 'result-card--priority': r.is_high_priority, 'result-card--expanded': expandedPart === r.part_id }"
+          :style="{ '--delay': i }"
+          @click="toggleExpand(r.part_id)">
+          <!-- Thumbnails row -->
+          <div class="result-card-thumbnails">
+            <img v-for="(url, ti) in r.thumbnail_urls" :key="ti"
+              class="result-card-thumb" :src="url"
+              @error="handleImgError">
+          </div>
           <div class="result-card-body">
             <div class="result-card-meta">
+              <span class="result-card-name">{{ r.name }}</span>
               <span class="result-card-category">{{ r.category }}</span>
-              <span class="result-card-spec">{{ r.specification }}</span>
+              <span v-if="r.is_high_priority" class="result-card-priority-badge">★ 重点</span>
             </div>
-            <div class="result-card-desc" v-if="r.description">{{ r.description }}</div>
             <div class="similarity-bar-wrap">
               <div class="similarity-bar">
                 <div class="similarity-bar-fill"
-                  :style="{ width: similarityPercent(r.similarity) + '%' }"></div>
+                  :style="{ width: r.best_similarity + '%' }"></div>
               </div>
-              <span class="similarity-value">{{ formatSimilarity(r.similarity) }}</span>
+              <span class="similarity-value">{{ r.best_similarity.toFixed(1) }}%</span>
+            </div>
+          </div>
+
+          <!-- Expanded detail -->
+          <div class="part-detail" v-if="expandedPart === r.part_id">
+            <div class="part-detail-section">
+              <div class="part-detail-label">最佳匹配照片</div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <img class="part-detail-best-photo" :src="r.best_photo_url"
+                  @error="handleImgError">
+                <span class="part-detail-angle">{{ r.best_photo_angle }}</span>
+              </div>
+            </div>
+            <div class="part-detail-section" v-if="r.thumbnail_urls && r.thumbnail_urls.length">
+              <div class="part-detail-label">全部照片 ({{ r.total_photos }})</div>
+              <div class="part-detail-thumbnails">
+                <img v-for="(url, ti) in r.thumbnail_urls" :key="ti"
+                  class="part-detail-thumb" :src="url"
+                  @error="handleImgError">
+              </div>
+            </div>
+            <div class="part-detail-section" v-if="specsEntries(r.specs).length">
+              <div class="part-detail-label">规格参数</div>
+              <table class="specs-table">
+                <tr v-for="[k, v] in specsEntries(r.specs)" :key="k">
+                  <td class="specs-table-key">{{ k }}</td>
+                  <td class="specs-table-value">{{ v }}</td>
+                </tr>
+              </table>
+            </div>
+            <div class="part-detail-section" v-if="r.description">
+              <div class="part-detail-label">描述</div>
+              <div class="part-detail-desc">{{ r.description }}</div>
             </div>
           </div>
         </div>
@@ -182,3 +218,147 @@ function handleImgError(e) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.result-card--priority {
+  border-color: var(--accent-dim);
+  background: rgba(212, 168, 67, 0.04);
+}
+.result-card--priority:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 20px rgba(212, 168, 67, 0.15);
+}
+
+.result-card--expanded {
+  border-color: var(--primary);
+  cursor: default;
+}
+
+.result-card {
+  cursor: pointer;
+}
+
+.result-card-thumbnails {
+  display: flex;
+  gap: 4px;
+  padding: 12px 12px 0;
+  overflow: hidden;
+}
+
+.result-card-thumb {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.result-card-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.result-card-priority-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(212, 168, 67, 0.12);
+  border: 1px solid var(--accent-dim);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.part-detail {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.part-detail-section {
+  margin-bottom: 12px;
+}
+
+.part-detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.part-detail-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.part-detail-best-photo {
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.part-detail-angle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.part-detail-thumbnails {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.part-detail-thumb {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+
+.specs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.specs-table td {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.specs-table-key {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  width: 120px;
+}
+
+.specs-table-value {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.part-detail-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+</style>
