@@ -122,12 +122,13 @@ class VectorStore:
         """从磁盘加载FAISS索引。重建_vectors字典以支持remove_ids和distance_stats。"""
         if FAISS_INDEX_PATH.exists():
             self._index = faiss.read_index(str(FAISS_INDEX_PATH))
-            # Populate _vectors from FAISS index so remove_ids and _update_distance_stats work
+            # Populate _vectors from FAISS inner index
             id_map = self._index.id_map
+            inner = self._index.index
             for i in range(self._index.ntotal):
                 stored_id = id_map.at(i)
-                vec = self._index.reconstruct(int(stored_id))
-                self._vectors[stored_id] = vec
+                vec = inner.reconstruct(i)
+                self._vectors[stored_id] = vec.copy()
             logger.info(f"FAISS索引已加载: {FAISS_INDEX_PATH}, 向量数={self._index.ntotal}, _vectors={len(self._vectors)}")
         else:
             logger.info("FAISS索引文件不存在，将在首次添加时创建")
