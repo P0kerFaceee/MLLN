@@ -1,58 +1,89 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel
 
 
-class LearnRequest(BaseModel):
-    category: str = Field(..., description="零件类别")
-    specification: str = Field(..., description="零件规格")
-    description: Optional[str] = Field(None, description="零件描述信息")
-
-
-class LearnResponse(BaseModel):
+# --- Spec Keys ---
+class SpecKeyItem(BaseModel):
     id: int
+    key_name: str
+    unit: str | None = None
+
+class SpecKeyCreate(BaseModel):
+    key_name: str
+    unit: str | None = None
+
+
+# --- Photos ---
+class PhotoItem(BaseModel):
+    id: int
+    part_id: int
+    image_path: str
+    angle: str | None = None
+
+
+# --- Parts ---
+class PartItem(BaseModel):
+    id: int
+    name: str
     category: str
-    specification: str
-    description: Optional[str]
-    status: str = Field(..., description="处理状态: success / pending_review / pending_complete")
-    message: str
+    specs: dict
+    description: str | None = None
+    photos: list[PhotoItem] = []
+
+class PartListItem(BaseModel):
+    id: int
+    name: str
+    category: str
+    specs: dict
+    description: str | None = None
+    thumbnail_urls: list[str] = []
+    photo_count: int = 0
+
+class PartCreate(BaseModel):
+    name: str
+    category: str
+    specs: dict = {}
+    description: str | None = None
+
+class PartUpdate(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    specs: dict | None = None
+    description: str | None = None
 
 
-class SearchRequest(BaseModel):
-    top_k: int = Field(default=10, description="返回TopK结果数量")
+# --- Warehouse ---
+class WarehouseResponse(BaseModel):
+    parts: list[PartListItem]
+    total: int
+
+class PartDetailResponse(BaseModel):
+    part: PartItem
 
 
+# --- Search ---
 class SearchResult(BaseModel):
-    id: int
+    part_id: int
+    name: str
     category: str
-    specification: str
-    description: Optional[str]
-    similarity: float
-    image_url: str
-
+    specs: dict
+    description: str | None = None
+    best_similarity_pct: float
+    best_photo_url: str
+    best_photo_angle: str | None = None
+    thumbnail_urls: list[str] = []
+    total_photos: int
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
-    query_category: Optional[str] = Field(None, description="百炼API判断的类别，降级时为None")
-    degraded: bool = Field(default=False, description="是否为降级模式（百炼API不可用）")
+    query_category: str | None = None
+    degraded: bool = False
     message: str
 
 
-class WarehouseItem(BaseModel):
-    id: int
-    category: str
-    specification: str
-    description: Optional[str]
-    image_url: str
-    created_at: Optional[str]
-
-
-class WarehouseResponse(BaseModel):
-    items: list[WarehouseItem]
-    total: int
-
-
+# --- Health ---
 class HealthResponse(BaseModel):
     status: str
-    db_count: int
+    parts_count: int
+    photos_count: int
     faiss_count: int
     categories: list[str]
