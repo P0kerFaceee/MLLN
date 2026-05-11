@@ -101,13 +101,15 @@ class VectorStore:
         else:
             logger.info("FAISS索引文件不存在，将在首次添加时创建")
 
-    def rebuild_category_map(self, records: list[dict]):
-        """从metadata数据库记录重建类别映射表（服务器重启后调用）。"""
+    def rebuild_category_map(self, part_records: list[dict], photo_to_part: dict[int, int]):
+        """从parts表记录重建类别映射表。category_map[category] = set of photo_ids belonging to parts in that category."""
         self._category_map.clear()
-        for r in records:
-            cat = r["category"]
-            id_ = r["id"]
+        for part in part_records:
+            cat = part["category"]
             if cat not in self._category_map:
                 self._category_map[cat] = set()
-            self._category_map[cat].add(id_)
-        logger.info(f"类别映射已重建: {len(self._category_map)} 个类别, 共 {len(records)} 条记录")
+            # Add all photo IDs that belong to this part
+            for photo_id, part_id in photo_to_part.items():
+                if part_id == part["id"]:
+                    self._category_map[cat].add(photo_id)
+        logger.info(f"类别映射已重建: {len(self._category_map)} 个类别")
