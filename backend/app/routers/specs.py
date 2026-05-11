@@ -18,7 +18,7 @@ async def create_spec_key(data: SpecKeyCreate):
         raise HTTPException(400, str(e))
 
 
-@router.delete("/keys/{key_id}")
-async def delete_spec_key(key_id: int):
-    part_store.delete_spec_key(key_id)
+@router.delete("/keys/{id}")
+async def delete_spec_key(id: int):
+    part_store.delete_spec_key(id)
     return {"status": "deleted"}

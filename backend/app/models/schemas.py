@@ -67,7 +67,7 @@ class SearchResult(BaseModel):
     category: str
     specs: dict
     description: str | None = None
-    best_similarity_pct: float
+    best_similarity: float
     best_photo_url: str
     best_photo_angle: str | None = None
     thumbnail_urls: list[str] = []

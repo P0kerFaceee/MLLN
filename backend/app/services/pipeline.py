@@ -32,7 +32,7 @@ def add_part_pipeline(
         while photo_id == part_id:
             photo_id = (photo_id + 1) % (10 ** 9)
 
-        vector_store.add(vector=features, id=photo_id, category=category, part_id=part_id)
+        vector_store.add(vector=features, id=photo_id, category=category)
         photo = part_store.add_photo(id=photo_id, part_id=part_id, image_path=image_path, angle=angle)
         photo_results.append(photo)
 
@@ -53,7 +53,7 @@ def add_photo_pipeline(part_id: int, image: Image.Image, angle: str | None, imag
     features = extract_features(enhanced)
 
     photo_id = int(time.time() * 1000) % (10 ** 9)
-    vector_store.add(vector=features, id=photo_id, category=part["category"], part_id=part_id)
+    vector_store.add(vector=features, id=photo_id, category=part["category"])
     photo = part_store.add_photo(id=photo_id, part_id=part_id, image_path=image_path, angle=angle)
 
     _update_distance_stats(features, photo_id)

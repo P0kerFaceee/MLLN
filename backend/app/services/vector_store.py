@@ -40,7 +40,7 @@ class VectorStore:
                 self._index.add_with_ids(all_vecs, all_ids)
                 logger.info(f"使用IVF+IDMap索引，训练完成（数据量{total}）")
 
-    def add(self, vector: np.ndarray, id: int, category: str, part_id: int = None):
+    def add(self, vector: np.ndarray, id: int, category: str):
         """动态添加向量到索引。part_id用于category_map关联。"""
         vector = vector.astype(np.float32).reshape(1, -1)
         self._vectors[id] = vector.squeeze()

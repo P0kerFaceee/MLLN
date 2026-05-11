@@ -24,7 +24,7 @@ async def search_item(
             category=r["category"],
             specs=r["specs"],
             description=r["description"],
-            best_similarity_pct=r["best_similarity_pct"],
+            best_similarity=r["best_similarity_pct"],
             best_photo_url=r["best_photo_url"],
             best_photo_angle=r["best_photo_angle"],
             thumbnail_urls=r["thumbnail_urls"],
