@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/query", response_model=SearchResponse)
 async def search_item(
     image: UploadFile = File(..., description="待检索图片"),
-    top_k: int = Form(default=10, ge=1, le=50, description="返回TopK结果数量"),
+    top_k: int = Form(default=10, ge=1, le=50, description="返回TopK零件数量"),
 ):
     image_bytes = await image.read()
     pil_image = Image.open(io.BytesIO(image_bytes))
@@ -19,12 +19,16 @@ async def search_item(
 
     search_results = [
         SearchResult(
-            id=r["id"],
+            part_id=r["part_id"],
+            name=r["name"],
             category=r["category"],
-            specification=r["specification"],
+            specs=r["specs"],
             description=r["description"],
-            similarity=r["similarity"],
-            image_url=r["image_url"],
+            best_similarity_pct=r["best_similarity_pct"],
+            best_photo_url=r["best_photo_url"],
+            best_photo_angle=r["best_photo_angle"],
+            thumbnail_urls=r["thumbnail_urls"],
+            total_photos=r["total_photos"],
         )
         for r in result["results"]
     ]

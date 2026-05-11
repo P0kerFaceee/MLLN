@@ -1,15 +1,16 @@
 from fastapi import APIRouter
 from app.models.schemas import HealthResponse
-from app.services.pipeline import vector_store, metadata_store
+from app.services.pipeline import part_store, vector_store
 
 router = APIRouter()
 
 
 @router.get("/health", response_model=HealthResponse)
-def health_check():
+async def health_check():
     return HealthResponse(
         status="ok",
-        db_count=metadata_store.count(),
+        parts_count=part_store.count_parts(),
+        photos_count=part_store.count_photos(),
         faiss_count=vector_store.get_total_count(),
-        categories=vector_store.get_categories(),
+        categories=part_store.get_categories(),
     )
