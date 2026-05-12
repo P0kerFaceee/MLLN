@@ -12,12 +12,12 @@ ENHANCED_DIR = BASE_DIR / "data" / "enhanced"
 ENHANCED_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def enhance_image(image: Image.Image, save_enhanced: bool = True, original_filename: str = None) -> Image.Image:
+def enhance_image(image: Image.Image, save_comparison: bool = True, original_filename: str = None) -> Image.Image:
     """图像增强：去噪、对比度调整、光照校正、背景替换为白色。增强失败时返回原始图片。
     
     Args:
         image: 输入的图片
-        save_enhanced: 是否保存处理后的白底图片
+        save_comparison: 是否保存原图和增强图的对比拼接图
         original_filename: 原始文件名，用于生成保存文件名
     
     Returns:
@@ -32,8 +32,8 @@ def enhance_image(image: Image.Image, save_enhanced: bool = True, original_filen
         
         enhanced = remove_background_to_white(enhanced)
         
-        if save_enhanced:
-            save_enhanced_image(enhanced, original_filename)
+        if save_comparison:
+            save_comparison_image(image, enhanced, original_filename)
         
         return enhanced
     except Exception as e:
@@ -60,11 +60,12 @@ def remove_background_to_white(image: Image.Image) -> Image.Image:
         return image
 
 
-def save_enhanced_image(image: Image.Image, original_filename: str = None) -> str:
-    """保存处理后的白底图片到 data/enhanced 目录
+def save_comparison_image(original_image: Image.Image, enhanced_image: Image.Image, original_filename: str = None) -> str:
+    """保存原图和增强图的左右对比拼接图到 data/enhanced 目录
     
     Args:
-        image: 要保存的图片
+        original_image: 原始图片
+        enhanced_image: 增强后的白底图片
         original_filename: 原始文件名，用于生成新文件名
     
     Returns:
@@ -76,16 +77,33 @@ def save_enhanced_image(image: Image.Image, original_filename: str = None) -> st
         if original_filename:
             filename_without_ext = Path(original_filename).stem
             ext = Path(original_filename).suffix or ".jpg"
-            saved_filename = f"{timestamp}_{filename_without_ext}_white{ext}"
+            saved_filename = f"{timestamp}_{filename_without_ext}_comparison{ext}"
         else:
-            saved_filename = f"{timestamp}_enhanced_white.jpg"
+            saved_filename = f"{timestamp}_comparison.jpg"
         
         save_path = ENHANCED_DIR / saved_filename
         
-        image.save(save_path, quality=95)
-        logger.info(f"白底图片已保存: {save_path}")
+        width, height = original_image.size
+        
+        comparison_image = Image.new('RGB', (width * 2, height), (255, 255, 255))
+        
+        if original_image.mode != 'RGB':
+            original_rgb = original_image.convert('RGB')
+        else:
+            original_rgb = original_image
+        
+        if enhanced_image.mode != 'RGB':
+            enhanced_rgb = enhanced_image.convert('RGB')
+        else:
+            enhanced_rgb = enhanced_image
+        
+        comparison_image.paste(original_rgb, (0, 0))
+        comparison_image.paste(enhanced_rgb, (width, 0))
+        
+        comparison_image.save(save_path, quality=95)
+        logger.info(f"对比图已保存: {save_path}")
         
         return str(save_path)
     except Exception as e:
-        logger.error(f"保存白底图片失败: {e}")
+        logger.error(f"保存对比图失败: {e}")
         return None
