@@ -1,4 +1,5 @@
 import logging
+import time
 import numpy as np
 import torch
 from PIL import Image
@@ -11,17 +12,38 @@ _model = None
 _transform = None
 
 
-def _load_model():
+def _load_model(max_retries: int = 3):
     global _model, _transform
     if _model is None:
         logger.info(f"加载DINOv2模型: {DINOV2_MODEL_NAME}")
-        _model = torch.hub.load("facebookresearch/dinov2", DINOV2_MODEL_NAME)
-        _model.eval()
-        _transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
+        
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                _model = torch.hub.load(
+                    "facebookresearch/dinov2", 
+                    DINOV2_MODEL_NAME,
+                    trust_repo=True,
+                    force_reload=False
+                )
+                _model.eval()
+                _transform = transforms.Compose([
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ])
+                logger.info(f"DINOv2模型加载成功: {DINOV2_MODEL_NAME}")
+                return _model, _transform
+            except Exception as e:
+                last_error = e
+                logger.warning(f"加载DINOv2模型失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 1
+                    time.sleep(wait_time)
+        
+        logger.error(f"DINOv2模型加载失败，已重试{max_retries}次")
+        raise last_error
+    
     return _model, _transform
 
 

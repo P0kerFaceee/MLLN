@@ -27,6 +27,7 @@ def add_part_pipeline(
     for img, angle, image_path in images:
         enhanced = enhance_image(img)
         features = extract_features(enhanced)
+        features = features / np.linalg.norm(features)
 
         photo_id = int(time.time() * 1000) % (10 ** 9)
         while photo_id == part_id:
@@ -51,6 +52,7 @@ def add_photo_pipeline(part_id: int, image: Image.Image, angle: str | None, imag
 
     enhanced = enhance_image(image)
     features = extract_features(enhanced)
+    features = features / np.linalg.norm(features)
 
     photo_id = int(time.time() * 1000) % (10 ** 9)
     vector_store.add(vector=features, id=photo_id, category=part["category"])
@@ -69,6 +71,7 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
     category = classify_category(enhanced)
 
     features = extract_features(enhanced)
+    features = features / np.linalg.norm(features)
     logger.info(f"搜索特征向量范数: {np.linalg.norm(features):.2f}")
 
     if category is not None and category in vector_store.get_categories():
@@ -81,15 +84,9 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
     if len(photo_ids) == 0:
         return {"results": [], "query_category": category, "degraded": degraded, "message": "未找到匹配项"}
 
-    # L2 → percentage mapping
-    stats = part_store.get_stats()
-    dist_mean = stats.get("dist_mean", 1000.0)
-    dist_std = stats.get("dist_std", 500.0)
-    if dist_std == 0:
-        dist_std = 1.0
-
-    def l2_to_pct(l2_dist: float) -> float:
-        return max(0.0, min(100.0, (1 - (l2_dist - dist_mean) / (3 * dist_std)) * 100))
+    def l2_to_cosine_similarity(l2_dist: float) -> float:
+        cos_sim = 1 - (l2_dist ** 2) / 2
+        return max(0.0, min(100.0, cos_sim * 100))
 
     # Part-level aggregation
     photo_to_part = part_store.get_photo_to_part_map(photo_ids)
@@ -107,15 +104,16 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
     for part_id, photo_matches in part_groups.items():
         photo_matches.sort(key=lambda x: x[1])
         best_photo_id, best_l2 = photo_matches[0]
-        best_pct = l2_to_pct(best_l2)
+        best_similarity = l2_to_cosine_similarity(best_l2)
 
         boost_pct = 0.0
         if len(photo_matches) > 1:
             second_l2 = photo_matches[1][1]
-            ratio = (second_l2 - best_l2) / best_l2 if best_l2 > 0 else 999
-            boost_pct = max(0.0, min(5.0, (1 - ratio) * 3))
+            if best_l2 > 0:
+                gap = second_l2 - best_l2
+                boost_pct = max(0.0, min(5.0, gap * 10))
 
-        final_pct = min(100.0, best_pct + boost_pct)
+        final_similarity = min(100.0, best_similarity + boost_pct)
 
         part = part_store.get_part(part_id)
         if not part:
@@ -130,12 +128,12 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
             "category": part["category"],
             "specs": part["specs"],
             "description": part["description"],
-            "best_similarity_pct": round(final_pct, 1),
+            "best_similarity_pct": round(final_similarity, 1),
             "best_photo_url": best_photo.get("image_path", ""),
             "best_photo_angle": best_photo.get("angle"),
             "thumbnail_urls": thumbnails,
             "total_photos": len(photos),
-            "is_high_priority": best_pct > 85.0,
+            "is_high_priority": final_similarity > 70.0,
         })
 
     high_priority = [p for p in part_scores if p["is_high_priority"]]
