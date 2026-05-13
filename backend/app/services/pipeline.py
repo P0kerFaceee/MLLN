@@ -100,6 +100,7 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
             continue
         part_groups.setdefault(part_id, []).append((photo_id, l2_dist))
 
+    logger.info(f"搜索结果：{part_groups}")
     part_scores: list[dict] = []
     for part_id, photo_matches in part_groups.items():
         photo_matches.sort(key=lambda x: x[1])
@@ -112,8 +113,8 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
             if best_l2 > 0:
                 gap = second_l2 - best_l2
                 boost_pct = max(0.0, min(5.0, gap * 10))
-
-        final_similarity = min(100.0, best_similarity + boost_pct)
+        logger.info(f"照片匹配：part_id={part_id}, photo_id={best_photo_id}, best_l2={best_l2:.1f},best_similarity={best_similarity},boost_pct={boost_pct}")
+        final_similarity = min(100.0, 0.9*best_similarity + 0.1*boost_pct)
 
         part = part_store.get_part(part_id)
         if not part:
