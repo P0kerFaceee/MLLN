@@ -31,5 +31,5 @@ FAISS_DEFAULT_TOP_K = 10
 # Bailian API
 BAILIAN_API_KEY = os.getenv("BAILIAN_API_KEY", "")
 BAILIAN_BASE_URL = os.getenv("BAILIAN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-BAILIAN_MODEL_NAME = os.getenv("BAILIAN_MODEL_NAME", "qwen-vl-max-latest")
+BAILIAN_MODEL_NAME = os.getenv("BAILIAN_MODEL_NAME", "qwen3.6-plus")
 BAILIAN_TIMEOUT = float(os.getenv("BAILIAN_TIMEOUT", "10.0"))

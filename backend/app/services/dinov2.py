@@ -4,7 +4,7 @@ import torch
 from PIL import Image
 from torchvision import transforms
 from transformers import AutoModel, AutoImageProcessor
-from app.config import DINOV2_MODEL_PATH
+from app.config import DINOV2_MODEL_PATH, DINOV2_FEATURE_DIM
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def _load_model(max_retries: int = 3):
     global _model, _transform
     if _model is None:
         logger.info(f"加载本地DINOv2模型: {DINOV2_MODEL_PATH}")
-        
+
         # 检查模型路径是否存在
         if not DINOV2_MODEL_PATH.exists():
             raise FileNotFoundError(
@@ -50,5 +50,5 @@ def extract_features(image: Image.Image) -> np.ndarray:
         # 获取最后一层隐藏状态的平均值作为特征向量
         features = outputs.last_hidden_state.mean(dim=1)
     features_np = features.squeeze(0).cpu().numpy()
-    assert features_np.shape == (1024,), f"特征维度异常: {features_np.shape}"
+    assert features_np.shape == (DINOV2_FEATURE_DIM,), f"特征维度异常: {features_np.shape}"
     return features_np.astype(np.float32)
