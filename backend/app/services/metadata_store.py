@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict
 import sqlite3
 import logging
 from app.config import DB_PATH
@@ -28,7 +29,7 @@ class MetadataStore:
         """)
         self._conn.commit()
 
-    def add(self, id: int, category: str, specification: str, description: str | None, image_path: str, status: str = "active"):
+    def add(self, id: int, category: str, specification: str, description: Optional[str], image_path: str, status: str = "active"):
         self._conn.execute(
             "INSERT INTO metadata (id, category, specification, description, image_path, status) VALUES (?, ?, ?, ?, ?, ?)",
             (id, category, specification, description, image_path, status),
@@ -36,13 +37,13 @@ class MetadataStore:
         self._conn.commit()
         logger.info(f"元数据写入成功: id={id}, category={category}")
 
-    def get(self, id: int) -> dict | None:
+    def get(self, id: int) -> Optional[Dict]:
         row = self._conn.execute("SELECT * FROM metadata WHERE id = ?", (id,)).fetchone()
         if row is None:
             return None
         return dict(row)
 
-    def get_batch(self, ids: list[int]) -> list[dict]:
+    def get_batch(self, ids: List[int]) -> List[Dict]:
         rows = self._conn.execute(
             "SELECT * FROM metadata WHERE id IN ({})".format(",".join(map(str, ids)))
         ).fetchall()

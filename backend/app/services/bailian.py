@@ -1,3 +1,4 @@
+from typing import Optional, List
 import io
 import logging
 import base64
@@ -55,13 +56,13 @@ def _call_api(image: Image.Image, prompt: str, max_retries: int = 3) -> object:
     raise last_error
 
 
-def _get_categories() -> list[str]:
+def _get_categories() -> List[str]:
     """延迟获取底库类别列表。"""
     from app.services.pipeline import part_store
     return part_store.get_categories()
 
 
-def classify_category(image: Image.Image) -> str | None:
+def classify_category(image: Image.Image) -> Optional[str]:
     """调用百炼API判断零件类别，限定为底库已有的类别名称。失败时返回None（触发降级）。"""
     try:
         categories = _get_categories()

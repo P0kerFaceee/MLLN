@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict
 import logging
 import sqlite3
 import json
@@ -49,7 +50,7 @@ class PartStore:
         self._conn.commit()
         logger.info("数据库表已创建/确认")
 
-    def add_part(self, id: int, name: str, category: str, specs: dict | None = None, description: str | None = None) -> dict:
+    def add_part(self, id: int, name: str, category: str, specs: Optional[Dict] = None, description: Optional[str] = None) -> Dict:
         specs_json = json.dumps(specs or {}, ensure_ascii=False)
         self._conn.execute(
             "INSERT INTO parts (id, name, category, specs, description) VALUES (?, ?, ?, ?, ?)",
@@ -58,7 +59,7 @@ class PartStore:
         self._conn.commit()
         return {"id": id, "name": name, "category": category, "specs": specs or {}, "description": description}
 
-    def get_part(self, id: int) -> dict | None:
+    def get_part(self, id: int) -> Optional[Dict]:
         row = self._conn.execute("SELECT * FROM parts WHERE id = ? AND status = 'active'", (id,)).fetchone()
         if not row:
             return None
@@ -66,7 +67,7 @@ class PartStore:
         result["specs"] = json.loads(result["specs"])
         return result
 
-    def list_parts(self, category: str | None = None, name: str | None = None) -> list[dict]:
+    def list_parts(self, category: Optional[str] = None, name: Optional[str] = None) -> List[Dict]:
         query = "SELECT * FROM parts WHERE status = 'active'"
         params = []
         if category:
@@ -84,7 +85,7 @@ class PartStore:
             results.append(r)
         return results
 
-    def update_part(self, id: int, name: str | None = None, category: str | None = None, specs: dict | None = None, description: str | None = None):
+    def update_part(self, id: int, name: Optional[str] = None, category: Optional[str] = None, specs: Optional[Dict] = None, description: Optional[str] = None):
         part = self.get_part(id)
         if not part:
             return None
@@ -103,7 +104,7 @@ class PartStore:
             self._conn.commit()
         return self.get_part(id)
 
-    def delete_part(self, id: int) -> list[int]:
+    def delete_part(self, id: int) -> List[int]:
         photo_ids = [r["id"] for r in self._conn.execute("SELECT id FROM photos WHERE part_id = ? AND status = 'active'", (id,)).fetchall()]
         self._conn.execute("UPDATE parts SET status = 'deleted' WHERE id = ?", (id,))
         self._conn.execute("UPDATE photos SET status = 'deleted' WHERE part_id = ?", (id,))
@@ -114,11 +115,11 @@ class PartStore:
         row = self._conn.execute("SELECT COUNT(*) as cnt FROM parts WHERE status = 'active'").fetchone()
         return row["cnt"]
 
-    def get_categories(self) -> list[str]:
+    def get_categories(self) -> List[str]:
         rows = self._conn.execute("SELECT DISTINCT category FROM parts WHERE status = 'active' ORDER BY category").fetchall()
         return [r["category"] for r in rows]
 
-    def add_photo(self, id: int, part_id: int, image_path: str, angle: str | None = None) -> dict:
+    def add_photo(self, id: int, part_id: int, image_path: str, angle: Optional[str] = None) -> Dict:
         self._conn.execute(
             "INSERT INTO photos (id, part_id, image_path, angle) VALUES (?, ?, ?, ?)",
             (id, part_id, image_path, angle)
@@ -126,11 +127,11 @@ class PartStore:
         self._conn.commit()
         return {"id": id, "part_id": part_id, "image_path": image_path, "angle": angle}
 
-    def get_photos_for_part(self, part_id: int) -> list[dict]:
+    def get_photos_for_part(self, part_id: int) -> List[Dict]:
         rows = self._conn.execute("SELECT * FROM photos WHERE part_id = ? AND status = 'active' ORDER BY id", (part_id,)).fetchall()
         return [dict(r) for r in rows]
 
-    def get_photo(self, id: int) -> dict | None:
+    def get_photo(self, id: int) -> Optional[Dict]:
         row = self._conn.execute("SELECT * FROM photos WHERE id = ? AND status = 'active'", (id,)).fetchone()
         return dict(row) if row else None
 
@@ -142,12 +143,12 @@ class PartStore:
         row = self._conn.execute("SELECT COUNT(*) as cnt FROM photos WHERE status = 'active'").fetchone()
         return row["cnt"]
 
-    def add_spec_key(self, key_name: str, unit: str | None = None) -> dict:
+    def add_spec_key(self, key_name: str, unit: Optional[str] = None) -> Dict:
         self._conn.execute("INSERT INTO spec_keys (key_name, unit) VALUES (?, ?)", (key_name, unit))
         self._conn.commit()
         return {"key_name": key_name, "unit": unit}
 
-    def list_spec_keys(self) -> list[dict]:
+    def list_spec_keys(self) -> List[Dict]:
         rows = self._conn.execute("SELECT * FROM spec_keys ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
@@ -155,7 +156,7 @@ class PartStore:
         self._conn.execute("DELETE FROM spec_keys WHERE id = ?", (id,))
         self._conn.commit()
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> Dict:
         rows = self._conn.execute("SELECT key, value FROM stats_meta").fetchall()
         return {r["key"]: r["value"] for r in rows}
 
@@ -163,13 +164,13 @@ class PartStore:
         self._conn.execute("INSERT OR REPLACE INTO stats_meta (key, value) VALUES (?, ?)", (key, value))
         self._conn.commit()
 
-    def get_batch_photos(self, ids: list[int]) -> list[dict]:
+    def get_batch_photos(self, ids: List[int]) -> List[Dict]:
         rows = self._conn.execute(
             f"SELECT * FROM photos WHERE id IN ({','.join(map(str, ids))}) AND status = 'active'"
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_photo_to_part_map(self, photo_ids: list[int]) -> dict[int, int]:
+    def get_photo_to_part_map(self, photo_ids: List[int]) -> Dict[int, int]:
         """返回 photo_id → part_id 的映射。"""
         rows = self._conn.execute(
             f"SELECT id, part_id FROM photos WHERE id IN ({','.join(map(str, photo_ids))}) AND status = 'active'"

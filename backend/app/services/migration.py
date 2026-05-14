@@ -1,6 +1,7 @@
 """将旧 metadata 表数据迁移到 parts + photos 表。
 同 category+specification 组合归为一个 part，name=specification，specs={}。
 FAISS 索引 ID 不变（photo.id = 原 metadata.id）。"""
+from typing import Dict, List, Tuple
 import logging
 import sqlite3
 import json
@@ -70,7 +71,7 @@ def run_migration():
     rows = conn.execute("SELECT * FROM metadata WHERE status = 'active'").fetchall()
     logger.info(f"迁移: {len(rows)} 条 metadata 记录")
 
-    groups: dict[tuple[str, str], list[dict]] = {}
+    groups: Dict[Tuple[str, str], List[Dict]] = {}
     for row in rows:
         key = (row["category"], row["specification"])
         groups.setdefault(key, []).append(dict(row))
