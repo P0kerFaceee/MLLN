@@ -21,6 +21,7 @@ YOLO_MODEL_NAME = "yolov8n.pt"
 # DINOv2
 DINOV2_MODEL_NAME = "dinov2_vitl14"
 DINOV2_FEATURE_DIM = 1024
+DINOV2_MODEL_PATH = BASE_DIR / os.getenv("DINOV2_MODEL_PATH", "/app/model/DINOv2-large").lstrip("/")
 
 # FAISS
 FAISS_NLIST = 100
