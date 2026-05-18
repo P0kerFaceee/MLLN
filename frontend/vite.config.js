@@ -8,8 +8,8 @@ export default defineConfig({
     port: 8018,
     host: '0.0.0.0',  // 允许移动端访问
     proxy: {
-      '/api': 'http://localhost:8000',
-      '/uploads': 'http://localhost:8000',
+      '/api': 'http://localhost:8999',
+      '/uploads': 'http://localhost:8999',
     },
   },
 })
