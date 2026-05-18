@@ -3,8 +3,6 @@ import time
 import numpy as np
 from PIL import Image
 from app.services.enhance import enhance_image
-from app.services.dinov2 import extract_features
-from app.services.bailian import classify_category
 from app.services.vector_store import VectorStore
 from app.services.part_store import PartStore
 from app.config import FAISS_DEFAULT_TOP_K
@@ -13,6 +11,13 @@ logger = logging.getLogger(__name__)
 
 vector_store = VectorStore()
 part_store = PartStore()
+
+
+def extract_features(image: Image.Image) -> np.ndarray:
+    """Lazy-load DINOv2 so API startup/tests do not import heavy ML packages."""
+    from app.services.dinov2 import extract_features as _extract_features
+
+    return _extract_features(image)
 
 
 def add_part_pipeline(
@@ -64,30 +69,49 @@ def add_photo_pipeline(part_id: int, image: Image.Image, angle: str | None, imag
     return {"photo": photo}
 
 
-def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dict:
-    """使用端管道：百炼类别→FAISS检索→零件级聚合→兜底规则→返回零件结果。"""
-    enhanced = enhance_image(image)
+def search_pipeline(
+    image: Image.Image,
+    top_k: int = FAISS_DEFAULT_TOP_K,
+    category: str | None = None,
+    specs: dict | None = None,
+) -> dict:
+    """使用端管道：前端上传类别/规格→FAISS检索→零件级聚合→返回零件结果。"""
+    total_start = time.perf_counter()
+    stage_start = time.perf_counter()
+    enhanced = enhance_image(image, save_comparison=False)
+    logger.info(f"搜索阶段耗时: image_preprocess={time.perf_counter() - stage_start:.3f}s")
 
-    category = classify_category(enhanced)
+    query_category = category.strip() if category else None
+    query_specs = {
+        str(k).strip(): str(v).strip()
+        for k, v in (specs or {}).items()
+        if str(k).strip() and str(v).strip()
+    }
 
+    stage_start = time.perf_counter()
     features = extract_features(enhanced)
     features = features / np.linalg.norm(features)
+    logger.info(f"搜索阶段耗时: dinov2_extract={time.perf_counter() - stage_start:.3f}s")
     logger.info(f"搜索特征向量范数: {np.linalg.norm(features):.2f}")
 
-    if category is not None and category in vector_store.get_categories():
-        photo_ids, distances = vector_store.search(query=features, category=category, top_k=top_k * 5)
+    stage_start = time.perf_counter()
+    if query_category is not None and query_category in vector_store.get_categories():
+        photo_ids, distances = vector_store.search(query=features, category=query_category, top_k=top_k * 5)
         degraded = False
     else:
         photo_ids, distances = vector_store.search(query=features, category=None, top_k=top_k * 5)
         degraded = True
+    logger.info(f"搜索阶段耗时: faiss_search={time.perf_counter() - stage_start:.3f}s")
 
     if len(photo_ids) == 0:
-        return {"results": [], "query_category": category, "degraded": degraded, "message": "未找到匹配项"}
+        logger.info(f"搜索总耗时: total={time.perf_counter() - total_start:.3f}s")
+        return {"results": [], "query_category": query_category, "degraded": degraded, "message": "未找到匹配项"}
 
     def l2_to_cosine_similarity(l2_dist: float) -> float:
         cos_sim = 1 - (l2_dist ** 2) / 2
         return max(0.0, min(100.0, cos_sim * 100))
 
+    stage_start = time.perf_counter()
     # Part-level aggregation
     photo_to_part = part_store.get_photo_to_part_map(photo_ids)
     photo_records = part_store.get_batch_photos(photo_ids)
@@ -119,6 +143,9 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
         part = part_store.get_part(part_id)
         if not part:
             continue
+        spec_match_pct = _spec_match_pct(query_specs, part.get("specs") or {})
+        if spec_match_pct > 0:
+            final_similarity = min(100.0, final_similarity + spec_match_pct * 0.05)
         photos = part_store.get_photos_for_part(part_id)
         best_photo = photo_map.get(best_photo_id, {})
         thumbnails = [p["image_path"] for p in photos[:3]]
@@ -145,12 +172,32 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
     results = results[:top_k]
 
     msg = f"检索完成，返回{len(results)}条零件结果"
-    if degraded and category:
-        msg += "（百炼类别未匹配底库，全库检索）"
+    if degraded and query_category:
+        msg += "（前端类别未匹配底库，全库检索）"
     elif degraded:
-        msg += "（百炼API降级，全库检索）"
+        msg += "（未选择类别，全库检索）"
 
-    return {"results": results, "query_category": category, "degraded": degraded, "message": msg}
+    logger.info(f"搜索阶段耗时: part_aggregation={time.perf_counter() - stage_start:.3f}s")
+    logger.info(f"搜索总耗时: total={time.perf_counter() - total_start:.3f}s")
+    return {"results": results, "query_category": query_category, "degraded": degraded, "message": msg}
+
+
+def _spec_match_pct(query_specs: dict, part_specs: dict) -> float:
+    """Return a small exact/contains match score for user-provided spec hints."""
+    if not query_specs or not part_specs:
+        return 0.0
+
+    matched = 0
+    for key, query_value in query_specs.items():
+        part_value = part_specs.get(key)
+        if part_value is None:
+            continue
+        query_text = str(query_value).strip().lower()
+        part_text = str(part_value).strip().lower()
+        if query_text and (query_text == part_text or query_text in part_text or part_text in query_text):
+            matched += 1
+
+    return matched / len(query_specs) * 100.0
 
 
 def _update_distance_stats(new_vector: np.ndarray, new_id: int):

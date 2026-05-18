@@ -7,6 +7,7 @@ from app.routers import search, health, warehouse, specs
 from app.services.pipeline import vector_store
 from app.services.part_store import PartStore
 from app.services.migration import run_migration
+from app.services.dinov2 import warmup_model
 from app.config import UPLOAD_DIR
 
 
@@ -22,6 +23,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    warmup_model()
     vector_store.load()
     run_migration()
     part_store = PartStore()

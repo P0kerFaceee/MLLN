@@ -52,3 +52,9 @@ def extract_features(image: Image.Image) -> np.ndarray:
     features_np = features.squeeze(0).cpu().numpy()
     assert features_np.shape == (DINOV2_FEATURE_DIM,), f"特征维度异常: {features_np.shape}"
     return features_np.astype(np.float32)
+
+
+def warmup_model():
+    """Load DINOv2 at startup so the first user search does not pay model load cost."""
+    _load_model()
+    logger.info("DINOv2模型预热完成")

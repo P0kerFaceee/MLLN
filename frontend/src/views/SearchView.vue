@@ -1,12 +1,16 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import { useSystemStore } from '../stores/system'
+import { useWarehouseStore } from '../stores/warehouse'
 
 const system = useSystemStore()
+const warehouse = useWarehouseStore()
 const queryImage = ref(null)
 const queryPreview = ref('')
 const topK = ref(10)
+const queryCategoryInput = ref('')
+const querySpecs = ref([{ key: '', value: '' }])
 const isDragOver = ref(false)
 const isSearching = ref(false)
 const results = ref([])
@@ -16,6 +20,8 @@ const searchDone = ref(false)
 const emptyMessage = ref('')
 const fileInput = ref(null)
 const expandedPart = ref(null)
+const categoriesForDropdown = computed(() => system.categories || [])
+const specKeyOptions = computed(() => warehouse.specKeys || [])
 
 function triggerFileInput() { fileInput.value.click() }
 
@@ -50,6 +56,14 @@ async function doSearch() {
   const formData = new FormData()
   formData.append('image', queryImage.value)
   formData.append('top_k', topK.value)
+  if (queryCategoryInput.value.trim()) {
+    formData.append('category', queryCategoryInput.value.trim())
+  }
+  const specsObj = {}
+  querySpecs.value.forEach(row => {
+    if (row.key && row.value) specsObj[row.key] = row.value
+  })
+  formData.append('specs', JSON.stringify(specsObj))
   try {
     const res = await api.post('/search/query', formData)
     results.value = res.data.results
@@ -74,11 +88,23 @@ function specsEntries(specs) {
   return Object.entries(specs)
 }
 
+function addQuerySpecRow() {
+  querySpecs.value.push({ key: '', value: '' })
+}
+
+function removeQuerySpecRow(index) {
+  querySpecs.value.splice(index, 1)
+}
+
 function handleImgError(e) {
   e.target.src = ''
   e.target.style.background = 'var(--surface-2)'
   e.target.alt = '图片加载失败'
 }
+
+onMounted(async () => {
+  await Promise.allSettled([warehouse.fetchSpecKeys(), system.fetchHealth()])
+})
 </script>
 
 <template>
@@ -112,6 +138,30 @@ function handleImgError(e) {
           </div>
           <div style="margin-top:12px">
             <div class="form-group">
+              <label class="form-label">类别筛选</label>
+              <input class="form-input" v-model="queryCategoryInput" list="search-category-list"
+                placeholder="选择类别可显著加快检索" style="padding:10px 14px;font-size:14px">
+              <datalist id="search-category-list">
+                <option v-for="cat in categoriesForDropdown" :key="cat" :value="cat"></option>
+              </datalist>
+            </div>
+            <div class="form-group">
+              <label class="form-label">规格信息</label>
+              <div v-for="(row, i) in querySpecs" :key="i" class="spec-row">
+                <select class="form-input spec-row-key" v-model="row.key" style="padding:8px 12px;font-size:13px;width:40%">
+                  <option value="">--选择规格项--</option>
+                  <option v-for="sk in specKeyOptions" :key="sk.id" :value="sk.key_name">{{ sk.key_name }}{{ sk.unit ? '(' + sk.unit + ')' : '' }}</option>
+                  <option :value="row.key" v-if="row.key && !specKeyOptions.find(s => s.key_name === row.key)">{{ row.key }}</option>
+                </select>
+                <input class="form-input spec-row-value" v-model="row.value"
+                  placeholder="值" style="padding:8px 12px;font-size:13px;width:40%">
+                <button class="btn btn-outline" style="padding:4px 8px;font-size:10px"
+                  @click.stop="removeQuerySpecRow(i)">-</button>
+              </div>
+              <button class="btn btn-outline" style="padding:4px 10px;font-size:11px;margin-top:6px"
+                @click.stop="addQuerySpecRow">+ 添加规格行</button>
+            </div>
+            <div class="form-group">
               <label class="form-label">返回数量 Top-K</label>
               <input class="form-input" v-model.number="topK" type="number" min="1" max="50">
             </div>
@@ -123,10 +173,10 @@ function handleImgError(e) {
             <span v-else>⬡ 开始检索</span>
           </button>
           <div v-if="queryCategory" class="search-category-badge" style="margin-top:12px">
-            百炼判断: {{ queryCategory }}
+            筛选类别: {{ queryCategory }}
           </div>
           <div v-if="degraded" class="search-category-badge search-degraded-badge" style="margin-top:8px">
-            ⚠ 降级模式：全库检索
+            ⚠ 全库检索：未使用有效类别筛选
           </div>
         </div>
       </div>
