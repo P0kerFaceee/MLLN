@@ -10,3 +10,6 @@ torchvision==0.23.0
 transformers==4.57.4
 ultralytics==8.4.47
 uvicorn==0.46.0
+onnxruntime==1.20.1
+faiss-cpu==1.13.2
+python-multipart==0.0.27
