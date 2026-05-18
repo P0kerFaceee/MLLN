@@ -1,6 +1,7 @@
 import io
 import os
 import time
+from typing import Optional, List
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from PIL import Image
 from app.models.schemas import (
@@ -14,7 +15,7 @@ router = APIRouter()
 
 
 @router.get("/parts", response_model=WarehouseResponse)
-async def list_parts(category: str | None = Query(None), name: str | None = Query(None)):
+async def list_parts(category: Optional[str] = Query(None), name: Optional[str] = Query(None)):
     parts = part_store.list_parts(category=category, name=name)
     items = []
     for p in parts:
@@ -48,8 +49,8 @@ async def create_part(
     category: str = Form(...),
     specs: str = Form("{}"),
     description: str = Form(None),
-    images: list[UploadFile] = File(..., description="零件照片(多张)"),
-    angles: list[str] = Form(None, description="角度标签列表(可选)"),
+    images: List[UploadFile] = File(..., description="零件照片(多张)"),
+    angles: List[str] = Form(None, description="角度标签列表(可选)"),
 ):
     import json
     try:

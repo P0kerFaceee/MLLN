@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict, Set, Tuple
 import logging
 import numpy as np
 import faiss
@@ -13,8 +14,8 @@ class VectorStore:
         self.dim = dim
         self.nlist = nlist
         self.nprobe = nprobe
-        self._vectors: dict[int, np.ndarray] = {}
-        self._category_map: dict[str, set[int]] = {}
+        self._vectors: Dict[int, np.ndarray] = {}
+        self._category_map: Dict[str, Set[int]] = {}
         self._index = None
 
     def _ensure_index(self):
@@ -53,7 +54,7 @@ class VectorStore:
         self.save()
         logger.info(f"向量添加成功: id={id}, category={category}")
 
-    def search(self, query: np.ndarray, category: str | None = None, top_k: int = 10) -> tuple[list[int], list[float]]:
+    def search(self, query: np.ndarray, category: Optional[str] = None, top_k: int = 10) -> Tuple[List[int], List[float]]:
         """检索相似向量。category不为None时按类别预过滤，为None时全库检索（降级模式）。"""
         if self._index is None or self._index.ntotal == 0:
             return [], []
@@ -79,7 +80,7 @@ class VectorStore:
 
         return result_ids, result_sims
 
-    def remove_ids(self, ids: list[int]):
+    def remove_ids(self, ids: List[int]):
         """从索引中移除指定ID的向量（重建不含这些ID的索引）。"""
         if self._index is None or self._index.ntotal == 0:
             return
@@ -109,7 +110,7 @@ class VectorStore:
             return self._index.ntotal
         return len(self._vectors)
 
-    def get_categories(self) -> list[str]:
+    def get_categories(self) -> List[str]:
         return list(self._category_map.keys())
 
     def save(self):
@@ -133,7 +134,7 @@ class VectorStore:
         else:
             logger.info("FAISS索引文件不存在，将在首次添加时创建")
 
-    def rebuild_category_map(self, part_records: list[dict], photo_to_part: dict[int, int]):
+    def rebuild_category_map(self, part_records: List[Dict], photo_to_part: Dict[int, int]):
         """从parts表记录重建类别映射表。category_map[category] = set of photo_ids belonging to parts in that category."""
         self._category_map.clear()
         for part in part_records:

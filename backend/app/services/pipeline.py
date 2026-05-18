@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict, Tuple
 import logging
 import time
 import numpy as np
@@ -16,8 +17,8 @@ part_store = PartStore()
 
 
 def add_part_pipeline(
-    name: str, category: str, specs: dict | None, description: str | None,
-    images: list[tuple[Image.Image, str | None, str]],
+    name: str, category: str, specs: Optional[Dict], description: Optional[str],
+    images: List[Tuple[Image.Image, Optional[str], str]],
 ) -> dict:
     """新增零件管道：创建part → 逐张照片(增强→DINOv2→FAISS写入)。"""
     part_id = int(time.time() * 1000) % (10 ** 9)
@@ -44,7 +45,7 @@ def add_part_pipeline(
     return {"part": part, "photos": photo_results}
 
 
-def add_photo_pipeline(part_id: int, image: Image.Image, angle: str | None, image_path: str) -> dict:
+def add_photo_pipeline(part_id: int, image: Image.Image, angle: Optional[str], image_path: str) -> dict:
     """给已有零件添加照片。"""
     part = part_store.get_part(part_id)
     if not part:
@@ -93,7 +94,7 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
     photo_records = part_store.get_batch_photos(photo_ids)
     photo_map = {r["id"]: r for r in photo_records}
 
-    part_groups: dict[int, list[tuple[int, float]]] = {}
+    part_groups: Dict[int, List[Tuple[int, float]]] = {}
     for photo_id, l2_dist in zip(photo_ids, distances):
         part_id = photo_to_part.get(photo_id)
         if part_id is None:
@@ -101,7 +102,7 @@ def search_pipeline(image: Image.Image, top_k: int = FAISS_DEFAULT_TOP_K) -> dic
         part_groups.setdefault(part_id, []).append((photo_id, l2_dist))
 
     logger.info(f"搜索结果：{part_groups}")
-    part_scores: list[dict] = []
+    part_scores: List[Dict] = []
     for part_id, photo_matches in part_groups.items():
         photo_matches.sort(key=lambda x: x[1])
         best_photo_id, best_l2 = photo_matches[0]

@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import SpecKeyItem, SpecKeyCreate
 from app.services.pipeline import part_store
@@ -5,7 +6,7 @@ from app.services.pipeline import part_store
 router = APIRouter()
 
 
-@router.get("/keys", response_model=list[SpecKeyItem])
+@router.get("/keys", response_model=List[SpecKeyItem])
 async def list_spec_keys():
     return part_store.list_spec_keys()
 
